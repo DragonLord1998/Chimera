@@ -483,7 +483,6 @@ class KleinSynthesizer:
         reference_images: list[Image.Image],
         width: int = 1024,
         height: int = 1024,
-        guidance_scale: float = 5.0,
         num_inference_steps: int = 4,
         seed: Optional[int] = None,
         preview_callback: Optional[Callable[[int, int, Image.Image], None]] = None,
@@ -491,7 +490,8 @@ class KleinSynthesizer:
     ) -> Image.Image:
         """Generate a single image using Klein 9B KV with reference images.
 
-        Klein supports max 4 reference images and is step-distilled to 4 steps.
+        Klein is step-distilled (no guidance_scale / CFG).
+        Supports max 4 reference images, 4 denoising steps.
         The KV-cache variant caches ref image projections after step 0.
         """
         if self.pipe is None:
@@ -527,12 +527,12 @@ class KleinSynthesizer:
                         pass
                 return callback_kwargs
 
+        # Klein is guidance-free (step-distilled) — no guidance_scale param
         pipe_kwargs: dict = dict(
             prompt=prompt,
             image=reference_images,
             width=width,
             height=height,
-            guidance_scale=guidance_scale,
             num_inference_steps=num_inference_steps,
             generator=generator,
         )
