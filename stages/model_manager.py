@@ -62,6 +62,15 @@ MODEL_REGISTRY: dict[str, dict] = {
         "ready_subdir": "tokenizer",
         "size_hint": "~7 MB",
     },
+    "zimage_vae": {
+        "repo_id": "Tongyi-MAI/Z-Image-Turbo",
+        "subdir": "z_image",
+        "description": "Z-Image VAE (AutoencoderKL, from official Z-Image repo)",
+        "snapshot": True,
+        "allow_patterns": ["vae/**"],
+        "ready_subdir": "vae",
+        "size_hint": "~335 MB",
+    },
     # --- FLUX.1-Krea-dev (alternative training base) ---
     "flux_krea": {
         "repo_id": "black-forest-labs/FLUX.1-Krea-dev",
