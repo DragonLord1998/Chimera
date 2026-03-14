@@ -18,12 +18,14 @@ git clone https://github.com/DragonLord1998/Chimera.git /workspace/Chimera
 cd /workspace/Chimera
 pip install --ignore-installed --break-system-packages -r requirements.txt
 pip install --ignore-installed --break-system-packages -U transformers diffusers
+pip install --force-reinstall --break-system-packages --no-cache-dir scipy
+python3 fix_transformers.py
 git clone --depth 1 https://github.com/ostris/ai-toolkit.git
 pip install --ignore-installed --break-system-packages -r ai-toolkit/requirements.txt
 python3 server.py
 ```
 
-> **Note:** RunPod images have system-managed Python packages (e.g. `blinker`) that block pip installs. Both `--ignore-installed` and `--break-system-packages` flags are required. The `transformers` and `diffusers` upgrade is needed because RunPod ships `huggingface-hub` 1.x which older versions don't support.
+> **Note:** RunPod images have system-managed Python packages that block pip installs. The `--ignore-installed` and `--break-system-packages` flags are required. `fix_transformers.py` patches a transformers 5.x bug where unknown backends (tf, keras_nlp, etc.) crash the import.
 
 Open port **7860** in your RunPod pod template. Access the UI at `http://<your-pod-ip>:7860`.
 
