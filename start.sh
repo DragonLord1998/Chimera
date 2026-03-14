@@ -36,6 +36,9 @@ pip install --break-system-packages -U "transformers>=5.0" "huggingface-hub>=1.0
 echo "[Chimera] Re-installing diffusers from GitHub main (post ai-toolkit)..."
 pip install --break-system-packages -U git+https://github.com/huggingface/diffusers.git || true
 
+# Re-install Flask and other deps that may have been clobbered by upgrades
+pip install --break-system-packages flask pillow google-genai sentencepiece || true
+
 # Verify critical import
 echo "[Chimera] Verifying Flux2KleinKVPipeline import..."
 python3 -c "from diffusers import Flux2KleinKVPipeline; print('[Chimera] Flux2KleinKVPipeline — OK')" || echo "[Chimera] WARNING: Flux2KleinKVPipeline not available — Klein 9B KV will not work"
