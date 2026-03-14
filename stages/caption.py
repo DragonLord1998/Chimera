@@ -154,6 +154,12 @@ class CaptionGenerator:
                 torch_dtype=torch.float32,
                 trust_remote_code=True,
             ).to(self.device)
+
+            # The processor adds ~1000+ special tokens (location, task tokens).
+            # Resize model embeddings to match or CUDA will assert on OOB indices.
+            if hasattr(self.processor, 'tokenizer'):
+                self.model.resize_token_embeddings(len(self.processor.tokenizer))
+
             self.model.eval()  # type: ignore[union-attr]
 
             print("[Chimera] CaptionGenerator: Florence 2 loaded.")
