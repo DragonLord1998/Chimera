@@ -76,6 +76,7 @@ def start_pipeline():
         "lora_rank": int(request.form.get("lora_rank", 16)),
         "lora_steps": int(request.form.get("lora_steps", 1500)),
         "learning_rate": float(request.form.get("learning_rate", 1e-4)),
+        "inference_steps": int(request.form.get("inference_steps", 50)),
         "sample_prompts": None,
     }
 
@@ -384,6 +385,7 @@ def _run_pipeline(
             num_images=num_images,
             start_from=0,
             progress_callback=synthesis_progress,
+            num_inference_steps=params["inference_steps"],
         )
         synth.unload_model()
         del synth

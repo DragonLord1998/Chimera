@@ -199,6 +199,7 @@ class DatasetSynthesizer:
         num_images: int = 25,
         start_from: int = 0,
         progress_callback: Optional[Callable[[int, int], None]] = None,
+        num_inference_steps: int = 50,
     ) -> list[str]:
         """Generate a full training dataset and save it to ``output_dir``.
 
@@ -263,6 +264,7 @@ class DatasetSynthesizer:
                 prompt=prompt,
                 reference_images=reference_images,
                 seed=seed,
+                num_inference_steps=num_inference_steps,
             )
 
             filename = f"img_{i + 1:03d}.png"
