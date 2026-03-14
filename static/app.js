@@ -662,12 +662,38 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let jobId;
     try {
-      const resp = await fetch("/api/start", { method: "POST", body: formData });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: resp.statusText }));
-        throw new Error(err.error || "Failed to start pipeline");
-      }
-      const json = await resp.json();
+      const json = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/start");
+
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            const mb = (e.loaded / 1024 / 1024).toFixed(1);
+            const totalMb = (e.total / 1024 / 1024).toFixed(1);
+            setStatus(`Uploading... ${pct}% (${mb} / ${totalMb} MB)`, "running");
+          }
+        });
+
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try { resolve(JSON.parse(xhr.responseText)); }
+            catch { reject(new Error("Invalid server response")); }
+          } else {
+            try {
+              const err = JSON.parse(xhr.responseText);
+              reject(new Error(err.error || xhr.statusText));
+            } catch { reject(new Error(xhr.statusText)); }
+          }
+        });
+
+        xhr.addEventListener("error", () => reject(new Error("Network error — upload failed")));
+        xhr.addEventListener("timeout", () => reject(new Error("Upload timed out")));
+        xhr.timeout = 600000; // 10 minute timeout for large files
+
+        setStatus("Uploading...", "running");
+        xhr.send(formData);
+      });
       jobId = json.job_id;
     } catch (err) {
       setStatus(`Failed to start: ${err.message}`, "error");
