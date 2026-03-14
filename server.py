@@ -112,6 +112,27 @@ try:
 except ImportError:
     pass
 
+# Patch AutoTokenizer.from_pretrained to auto-fallback to slow tokenizer.
+# transformers 5.x TokenizersBackend fails to instantiate many tokenizers
+# (T5, CLIP, etc.) that AI Toolkit and Florence 2 need.
+try:
+    from transformers import AutoTokenizer as _AutoTok
+    _orig_from_pretrained = _AutoTok.from_pretrained.__func__
+
+    @classmethod
+    def _safe_from_pretrained(cls, *args, **kwargs):
+        try:
+            return _orig_from_pretrained(cls, *args, **kwargs)
+        except (ValueError, OSError) as e:
+            if "backend tokenizer" in str(e) or "slow tokenizer" in str(e):
+                kwargs["use_fast"] = False
+                return _orig_from_pretrained(cls, *args, **kwargs)
+            raise
+
+    _AutoTok.from_pretrained = _safe_from_pretrained
+except Exception:
+    pass
+
 import datetime
 import gc
 import json
