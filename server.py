@@ -133,6 +133,17 @@ try:
 except Exception:
     pass
 
+# Stub removed ViTHybrid classes — AI Toolkit imports them but they were
+# dropped in transformers 5.x. Not needed for Z-Image LoRA training.
+try:
+    import transformers as _tf
+    if not hasattr(_tf, "ViTHybridImageProcessor"):
+        _tf.ViTHybridImageProcessor = type("ViTHybridImageProcessor", (), {})
+    if not hasattr(_tf, "ViTHybridForImageClassification"):
+        _tf.ViTHybridForImageClassification = type("ViTHybridForImageClassification", (), {})
+except Exception:
+    pass
+
 import datetime
 import gc
 import json
