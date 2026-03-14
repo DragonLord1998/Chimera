@@ -211,13 +211,57 @@ document.addEventListener("DOMContentLoaded", () => {
   const viewsZipName  = document.getElementById("viewsZipName");
   const viewsZipClear = document.getElementById("viewsZipClear");
 
-  // Views zip upload
-  viewsZipInput.addEventListener("change", e => {
+  // Views zip upload — extract and preview images
+  viewsZipInput.addEventListener("change", async e => {
     const file = e.target.files[0];
-    if (file && file.name.endsWith(".zip")) {
-      viewsZipFile = file;
-      viewsZipName.textContent = file.name;
-      viewsZipClear.hidden = false;
+    if (!file || !file.name.endsWith(".zip")) return;
+
+    viewsZipFile = file;
+    viewsZipName.textContent = file.name;
+    viewsZipClear.hidden = false;
+
+    // Extract images from zip and populate view placeholders
+    try {
+      const zip = await JSZip.loadAsync(file);
+      const imageFiles = Object.keys(zip.files)
+        .filter(name => !zip.files[name].dir && /\.(png|jpg|jpeg|webp)$/i.test(name))
+        .sort();
+
+      const viewSlots = ["viewLeft", "viewFront", "viewRight"];
+      const viewNames = ["left", "front", "right"];
+
+      // Try matching by name first (left.png, front.png, right.png)
+      const matched = [];
+      for (const vn of viewNames) {
+        const found = imageFiles.find(f => f.toLowerCase().replace(/.*\//, "").startsWith(vn));
+        matched.push(found || null);
+      }
+
+      // Fill remaining slots with unmatched images in order
+      const used = new Set(matched.filter(Boolean));
+      const remaining = imageFiles.filter(f => !used.has(f));
+      for (let i = 0; i < matched.length; i++) {
+        if (!matched[i] && remaining.length > 0) {
+          matched[i] = remaining.shift();
+        }
+      }
+
+      for (let i = 0; i < viewSlots.length; i++) {
+        if (!matched[i]) continue;
+        const blob = await zip.files[matched[i]].async("blob");
+        const url = URL.createObjectURL(blob);
+        const el = document.getElementById(viewSlots[i]);
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = viewNames[i];
+        el.innerHTML = "";
+        el.appendChild(img);
+        el.classList.add("loaded");
+      }
+
+      activateSection("sectionViews");
+    } catch (err) {
+      console.error("Failed to preview zip contents:", err);
     }
   });
 
@@ -226,6 +270,22 @@ document.addEventListener("DOMContentLoaded", () => {
     viewsZipName.textContent = "";
     viewsZipClear.hidden = true;
     viewsZipInput.value = "";
+
+    // Reset view placeholders
+    ["viewLeft", "viewFront", "viewRight"].forEach(id => {
+      const el = document.getElementById(id);
+      const viewName = id.replace("view", "");
+      const shortLabel = viewName === "Left" ? "L" : viewName === "Front" ? "F" : "R";
+      const longLabel = viewName === "Left" ? "Left Side Fullbody"
+                      : viewName === "Front" ? "Front Face"
+                      : "Right Side Fullbody";
+      el.classList.remove("loaded");
+      el.innerHTML = `<div class="placeholder-inner">
+        <div class="placeholder-icon">${shortLabel}</div>
+        <span>${longLabel}</span>
+      </div>`;
+    });
+    document.getElementById("sectionViews").classList.remove("active");
   });
 
   // Init grid with default 25 placeholders
@@ -273,8 +333,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------------------------------------------------------------------------
 
   startBtn.addEventListener("click", async () => {
-    if (!uploadedFile) {
-      alert("Please upload a character image first.");
+    if (!uploadedFile && !viewsZipFile) {
+      alert("Please upload a character image or a views zip file.");
       return;
     }
 
@@ -330,7 +390,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Build form data
     const formData = new FormData();
-    formData.append("image", uploadedFile);
+    if (uploadedFile) {
+      formData.append("image", uploadedFile);
+    }
     formData.append("trigger_word", document.getElementById("triggerWord").value.trim() || "chrx");
     formData.append("gemini_key", geminiKey);
     formData.append("hf_token", document.getElementById("hfToken").value.trim());

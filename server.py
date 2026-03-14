@@ -61,12 +61,8 @@ def serve_static(path):
 @app.route("/api/start", methods=["POST"])
 def start_pipeline():
     # Accept multipart/form-data
-    if "image" not in request.files:
-        return jsonify({"error": "No image file provided"}), 400
-
-    image_file = request.files["image"]
-    if not image_file.filename:
-        return jsonify({"error": "Empty filename"}), 400
+    image_file = request.files.get("image")
+    has_image = image_file is not None and image_file.filename
 
     # Collect params (all optional with defaults)
     params = {
@@ -92,6 +88,9 @@ def start_pipeline():
     views_zip = request.files.get("views_zip")
     has_views_zip = views_zip is not None and views_zip.filename
 
+    if not has_image and not has_views_zip:
+        return jsonify({"error": "Upload a character image or a views zip file"}), 400
+
     if not has_views_zip and not params["gemini_key"]:
         return jsonify({"error": "Gemini API key is required (or upload a views zip)"}), 400
 
@@ -100,10 +99,12 @@ def start_pipeline():
     job_dir = os.path.join(JOBS_DIR, job_id)
     os.makedirs(job_dir, exist_ok=True)
 
-    # Save uploaded image
-    ext = os.path.splitext(image_file.filename)[1] or ".png"
-    image_path = os.path.join(job_dir, f"input{ext}")
-    image_file.save(image_path)
+    # Save uploaded image (optional when views zip is provided)
+    image_path = None
+    if has_image:
+        ext = os.path.splitext(image_file.filename)[1] or ".png"
+        image_path = os.path.join(job_dir, f"input{ext}")
+        image_file.save(image_path)
 
     # Save views zip if provided
     views_zip_path = None
@@ -241,7 +242,7 @@ def download_views(job_id: str):
 def _run_pipeline(
     job_id: str,
     q: queue.Queue,
-    image_path: str,
+    image_path: str | None,
     job_dir: str,
     params: dict,
     views_zip_path: str | None = None,
