@@ -85,6 +85,18 @@ class ImageUpscaler:
             print("[Chimera] Upscaler: no images found to upscale.")
             return
 
+        # Skip if images are already at or above the target resolution
+        from PIL import Image as _PILImage
+        sample_path = os.path.join(dataset_dir, image_files[0])
+        with _PILImage.open(sample_path) as sample_img:
+            min_side = min(sample_img.width, sample_img.height)
+        if min_side >= target_resolution:
+            print(
+                f"[Chimera] Upscaler: images already >= {target_resolution}px "
+                f"({min_side}px) — skipping SeedVR2."
+            )
+            return
+
         total = len(image_files)
 
         # Preserve originals for before/after comparison
