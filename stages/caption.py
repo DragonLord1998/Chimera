@@ -19,32 +19,12 @@ class CaptionGeneratorError(Exception):
     """Raised when captioning fails or the model is not loaded."""
 
 
-def _patch_tokenizer_backend() -> None:
-    """Fix transformers 5.x: TokenizersBackend missing additional_special_tokens.
-
-    Florence 2's custom processor code accesses tokenizer.additional_special_tokens,
-    which was available in transformers 4.x but moved/removed in 5.x's backend
-    refactor.  This patches any Backend class that's missing the attribute.
-    """
-    import sys
-
-    for mod_name, mod in list(sys.modules.items()):
-        if not mod or "transformers" not in mod_name:
-            continue
-        for attr_name in dir(mod):
-            obj = getattr(mod, attr_name, None)
-            if not isinstance(obj, type):
-                continue
-            if "Backend" in attr_name and not hasattr(obj, "additional_special_tokens"):
-                obj.additional_special_tokens = property(
-                    lambda self: getattr(self, "_additional_special_tokens", []),
-                    lambda self, v: setattr(self, "_additional_special_tokens", v),
-                )
-
-
 class CaptionGenerator:
     """
     Wraps Florence 2 Large for detailed image captioning.
+
+    Uses the ``florence-community/Florence-2-large`` checkpoint which is
+    natively integrated into transformers 5.x (no ``trust_remote_code``).
 
     Load the model with :meth:`load_model` before calling any captioning
     methods, and release VRAM when done with :meth:`unload_model`.
@@ -73,9 +53,9 @@ class CaptionGenerator:
         """
         Load Florence 2 Large into VRAM (or CPU if device is ``"cpu"``).
 
-        Uses ``AutoModelForCausalLM`` and ``AutoProcessor`` from the
-        ``transformers`` library.  Safe to call multiple times — subsequent
-        calls are no-ops if the model is already loaded.
+        Uses ``Florence2ForConditionalGeneration`` and ``AutoProcessor``
+        from transformers (native, no trust_remote_code).  Safe to call
+        multiple times — subsequent calls are no-ops if already loaded.
 
         Raises:
             CaptionGeneratorError: If the model cannot be loaded from
@@ -85,80 +65,16 @@ class CaptionGenerator:
             return  # already loaded
 
         try:
-            from transformers import AutoModelForCausalLM, AutoProcessor  # type: ignore[import]
-
-            # Patch Florence 2 config: forced_bos_token_id removed in transformers 5.x
-            # Florence 2's custom config references it but the base class dropped it.
-            try:
-                from transformers import GenerationConfig as _GC
-                if not hasattr(_GC, "forced_bos_token_id"):
-                    _GC.forced_bos_token_id = None
-            except Exception:
-                pass
-
-            # Also patch at the PretrainedConfig level
-            try:
-                from transformers import PretrainedConfig as _PC
-                if not hasattr(_PC, "forced_bos_token_id"):
-                    _PC.forced_bos_token_id = None
-            except Exception:
-                pass
+            from transformers import AutoProcessor, Florence2ForConditionalGeneration
 
             print(f"[Chimera] CaptionGenerator: loading Florence 2 from {self.model_path}...")
 
-            # Load processor — multiple fallbacks for transformers 5.x compat
-            _load_kwargs = dict(trust_remote_code=True)
-            try:
-                self.processor = AutoProcessor.from_pretrained(
-                    self.model_path, **_load_kwargs,
-                )
-            except (AttributeError, ValueError, OSError, TypeError) as load_err:
-                err_msg = str(load_err)
-                if "forced_bos_token_id" in err_msg:
-                    print("[Chimera] Patching forced_bos_token_id for transformers 5.x...")
-                    # Patch the Florence2LanguageConfig class directly
-                    import sys as _sys
-                    for _mn, _mod in list(_sys.modules.items()):
-                        if not _mod or "florence" not in _mn.lower():
-                            continue
-                        for _an in dir(_mod):
-                            _cls = getattr(_mod, _an, None)
-                            if isinstance(_cls, type) and "Config" in _an:
-                                if not hasattr(_cls, "forced_bos_token_id"):
-                                    _cls.forced_bos_token_id = None
-                    self.processor = AutoProcessor.from_pretrained(
-                        self.model_path, **_load_kwargs,
-                    )
-                elif "additional_special_tokens" in err_msg:
-                    print("[Chimera] Patching tokenizer backend for transformers 5.x...")
-                    _patch_tokenizer_backend()
-                    self.processor = AutoProcessor.from_pretrained(
-                        self.model_path, **_load_kwargs,
-                    )
-                elif "slow tokenizer" in err_msg or "sentencepiece" in err_msg or "backend tokenizer" in err_msg:
-                    print("[Chimera] Fast tokenizer failed — loading tokenizer separately with use_fast=False...")
-                    from transformers import AutoTokenizer
-                    _tokenizer = AutoTokenizer.from_pretrained(
-                        self.model_path, use_fast=False, **_load_kwargs,
-                    )
-                    self.processor = AutoProcessor.from_pretrained(
-                        self.model_path, tokenizer=_tokenizer, **_load_kwargs,
-                    )
-                else:
-                    raise
+            self.processor = AutoProcessor.from_pretrained(self.model_path)
 
-            # Florence 2 is small (~2 GB) — use float32 to avoid dtype mismatches
-            # between input tensors (float32) and model weights (float16).
-            self.model = AutoModelForCausalLM.from_pretrained(
+            self.model = Florence2ForConditionalGeneration.from_pretrained(
                 self.model_path,
                 torch_dtype=torch.float32,
-                trust_remote_code=True,
             ).to(self.device)
-
-            # The processor adds ~1000+ special tokens (location, task tokens).
-            # Resize model embeddings to match or CUDA will assert on OOB indices.
-            if hasattr(self.processor, 'tokenizer'):
-                self.model.resize_token_embeddings(len(self.processor.tokenizer))
 
             self.model.eval()  # type: ignore[union-attr]
 
@@ -224,7 +140,6 @@ class CaptionGenerator:
                     **inputs,
                     max_new_tokens=1024,
                     do_sample=False,
-                    use_cache=False,  # transformers 5.x EncoderDecoderCache breaks Florence 2's custom code
                 )
 
             generated_text = self.processor.batch_decode(  # type: ignore[union-attr]

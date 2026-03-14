@@ -28,9 +28,9 @@ MODEL_REGISTRY: dict[str, dict] = {
     #
     # --- Florence 2 (captioning) ---
     "florence2": {
-        "repo_id": "microsoft/Florence-2-large",
+        "repo_id": "florence-community/Florence-2-large",
         "subdir": "florence2",
-        "description": "Florence 2 Large captioning model",
+        "description": "Florence 2 Large captioning model (community, native transformers 5.x)",
         "snapshot": True,
         "size_hint": "~2 GB",
     },
