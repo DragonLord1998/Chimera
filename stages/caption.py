@@ -89,19 +89,24 @@ class CaptionGenerator:
 
             print(f"[Chimera] CaptionGenerator: loading Florence 2 from {self.model_path}...")
 
-            # Load processor — retry with tokenizer backend patch on transformers 5.x
+            # Load processor — multiple fallbacks for transformers 5.x compat
+            _load_kwargs = dict(trust_remote_code=True)
             try:
                 self.processor = AutoProcessor.from_pretrained(
-                    self.model_path,
-                    trust_remote_code=True,
+                    self.model_path, **_load_kwargs,
                 )
-            except AttributeError as attr_err:
-                if "additional_special_tokens" in str(attr_err):
+            except (AttributeError, ValueError) as load_err:
+                err_msg = str(load_err)
+                if "additional_special_tokens" in err_msg:
                     print("[Chimera] Patching tokenizer backend for transformers 5.x...")
                     _patch_tokenizer_backend()
                     self.processor = AutoProcessor.from_pretrained(
-                        self.model_path,
-                        trust_remote_code=True,
+                        self.model_path, **_load_kwargs,
+                    )
+                elif "slow tokenizer" in err_msg or "sentencepiece" in err_msg:
+                    print("[Chimera] Fast tokenizer failed, falling back to slow tokenizer...")
+                    self.processor = AutoProcessor.from_pretrained(
+                        self.model_path, use_fast=False, **_load_kwargs,
                     )
                 else:
                     raise
