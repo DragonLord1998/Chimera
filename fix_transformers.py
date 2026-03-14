@@ -90,5 +90,104 @@ def patch():
             print("No patches needed.")
 
 
+def patch_florence2():
+    """Patch Florence 2 custom code for transformers 5.x compatibility.
+
+    Fixes:
+    1. forced_bos_token_id AttributeError in config
+    2. additional_special_tokens AttributeError in processor
+    3. _supports_sdpa missing on Florence2ForConditionalGeneration
+    4. torch.linspace meta tensor crash during DaViT init
+    """
+    import glob
+
+    # Find Florence 2 files in both model dir and HF cache
+    search_paths = [
+        "/workspace/models/florence2",
+        os.path.expanduser("~/.cache/huggingface/modules/transformers_modules/florence2"),
+    ]
+
+    patched = 0
+
+    for base_dir in search_paths:
+        if not os.path.isdir(base_dir):
+            continue
+
+        # --- configuration_florence2.py ---
+        cfg_path = os.path.join(base_dir, "configuration_florence2.py")
+        if os.path.isfile(cfg_path):
+            with open(cfg_path, "r") as f:
+                content = f.read()
+            orig = content
+            content = content.replace(
+                "if self.forced_bos_token_id is None",
+                'if getattr(self, "forced_bos_token_id", None) is None',
+            )
+            if content != orig:
+                with open(cfg_path, "w") as f:
+                    f.write(content)
+                patched += 1
+
+        # --- processing_florence2.py ---
+        proc_path = os.path.join(base_dir, "processing_florence2.py")
+        if os.path.isfile(proc_path):
+            with open(proc_path, "r") as f:
+                content = f.read()
+            orig = content
+            content = content.replace(
+                "tokenizer.additional_special_tokens + ",
+                "getattr(tokenizer, 'additional_special_tokens', []) + ",
+            )
+            if content != orig:
+                with open(proc_path, "w") as f:
+                    f.write(content)
+                patched += 1
+
+        # --- modeling_florence2.py ---
+        model_path = os.path.join(base_dir, "modeling_florence2.py")
+        if os.path.isfile(model_path):
+            with open(model_path, "r") as f:
+                content = f.read()
+            orig = content
+
+            # Fix _supports_sdpa / _supports_flash_attn_2 property -> getattr
+            content = content.replace(
+                "return self.language_model._supports_sdpa",
+                'return getattr(self.language_model, "_supports_sdpa", True)',
+            )
+            content = content.replace(
+                "return self.language_model._supports_flash_attn_2",
+                'return getattr(self.language_model, "_supports_flash_attn_2", False)',
+            )
+
+            # Add class attributes to Florence2ForConditionalGeneration
+            old_class = "class Florence2ForConditionalGeneration(Florence2PreTrainedModel):\n    _tied_weights_keys"
+            new_class = (
+                "class Florence2ForConditionalGeneration(Florence2PreTrainedModel):\n"
+                "    _supports_sdpa = True\n"
+                "    _supports_flash_attn_2 = True\n"
+                "    _tied_weights_keys"
+            )
+            if old_class in content and "_supports_sdpa = True\n    _supports_flash_attn_2 = True\n    _tied" not in content:
+                content = content.replace(old_class, new_class)
+
+            # Fix meta tensor crash in DaViT torch.linspace
+            content = content.replace(
+                "torch.linspace(0, drop_path_rate, sum(depths)*2)",
+                'torch.linspace(0, drop_path_rate, sum(depths)*2, device="cpu")',
+            )
+
+            if content != orig:
+                with open(model_path, "w") as f:
+                    f.write(content)
+                patched += 1
+
+    if patched > 0:
+        print(f"[Florence 2] Patched {patched} file(s) for transformers 5.x compat.")
+    else:
+        print("[Florence 2] Already patched or files not found.")
+
+
 if __name__ == "__main__":
     patch()
+    patch_florence2()
