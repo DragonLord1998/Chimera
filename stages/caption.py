@@ -95,7 +95,7 @@ class CaptionGenerator:
                 self.processor = AutoProcessor.from_pretrained(
                     self.model_path, **_load_kwargs,
                 )
-            except (AttributeError, ValueError) as load_err:
+            except (AttributeError, ValueError, OSError) as load_err:
                 err_msg = str(load_err)
                 if "additional_special_tokens" in err_msg:
                     print("[Chimera] Patching tokenizer backend for transformers 5.x...")
@@ -103,10 +103,14 @@ class CaptionGenerator:
                     self.processor = AutoProcessor.from_pretrained(
                         self.model_path, **_load_kwargs,
                     )
-                elif "slow tokenizer" in err_msg or "sentencepiece" in err_msg:
-                    print("[Chimera] Fast tokenizer failed, falling back to slow tokenizer...")
-                    self.processor = AutoProcessor.from_pretrained(
+                elif "slow tokenizer" in err_msg or "sentencepiece" in err_msg or "backend tokenizer" in err_msg:
+                    print("[Chimera] Fast tokenizer failed — loading tokenizer separately with use_fast=False...")
+                    from transformers import AutoTokenizer
+                    _tokenizer = AutoTokenizer.from_pretrained(
                         self.model_path, use_fast=False, **_load_kwargs,
+                    )
+                    self.processor = AutoProcessor.from_pretrained(
+                        self.model_path, tokenizer=_tokenizer, **_load_kwargs,
                     )
                 else:
                     raise
