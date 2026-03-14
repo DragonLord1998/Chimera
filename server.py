@@ -679,7 +679,7 @@ def _run_pipeline(
         )
 
         total_steps = params["lora_steps"]
-        save_every = 500  # checkpoint / sample interval
+        save_every = 250  # checkpoint / sample interval
 
         samples_dir = os.path.join(output_dir, output_name, "samples")
         checkpoint_dir_path = os.path.join(output_dir, output_name)
