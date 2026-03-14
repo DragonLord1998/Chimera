@@ -58,6 +58,32 @@ try:
 except ImportError:
     pass
 
+# Patch transformers 5.x: find_pruneable_heads_and_indices moved out of pytorch_utils.
+# Florence 2's custom code and AI Toolkit still import from the old location.
+try:
+    from transformers import pytorch_utils as _pt_utils
+    if not hasattr(_pt_utils, "find_pruneable_heads_and_indices"):
+        # Try importing from the new location
+        try:
+            from transformers.utils.modeling_utils import find_pruneable_heads_and_indices
+            _pt_utils.find_pruneable_heads_and_indices = find_pruneable_heads_and_indices
+        except ImportError:
+            # Provide a minimal fallback implementation
+            import torch as _torch
+
+            def _find_pruneable_heads_and_indices(heads, n_heads, head_size, already_pruned_heads):
+                mask = _torch.ones(n_heads, head_size)
+                heads = set(heads) - already_pruned_heads
+                for head in heads:
+                    head -= sum(1 if h < head else 0 for h in already_pruned_heads)
+                    mask[head] = 0
+                index = _torch.arange(len(mask.view(-1)))[mask.view(-1).bool()]
+                return heads, index
+
+            _pt_utils.find_pruneable_heads_and_indices = _find_pruneable_heads_and_indices
+except Exception:
+    pass
+
 import datetime
 import gc
 import json
