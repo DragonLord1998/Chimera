@@ -15,6 +15,7 @@ import logging
 from pathlib import Path
 from typing import Callable, Optional
 
+import numpy as np
 import torch
 from PIL import Image
 
@@ -42,6 +43,49 @@ else:
     _FLUX2_UNAVAILABLE_MSG = ""
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Latent preview helper
+# ---------------------------------------------------------------------------
+
+
+def _latents_to_preview(latents: torch.Tensor, size: int = 256) -> Image.Image:
+    """Approximate RGB preview from latents without full VAE decode.
+
+    Works with both packed (B, seq_len, C) and spatial (B, C, H, W) latents.
+    The result is a rough, progressively-sharpening preview — intentionally
+    lo-fi but near-zero cost compared to a real VAE decode.
+    """
+    try:
+        if latents.dim() == 3:
+            # Packed format (B, seq_len, channels) — common in Flux
+            b, seq_len, c = latents.shape
+            h = w = int(seq_len ** 0.5)
+            if h * w < seq_len:
+                h += 1
+            usable = min(h * w, seq_len)
+            lat = latents[0, :usable, :3].float().cpu()
+            lat = lat.reshape(min(h, int(usable ** 0.5) + 1), -1, 3)[:h, :w, :]
+        elif latents.dim() == 4:
+            # Spatial format (B, C, H, W)
+            lat = latents[0, :3].float().cpu().permute(1, 2, 0)
+        else:
+            return Image.new("RGB", (size, size), (40, 40, 60))
+
+        # Normalize to 0-1
+        vmin, vmax = lat.min(), lat.max()
+        if (vmax - vmin) > 1e-8:
+            lat = (lat - vmin) / (vmax - vmin)
+        else:
+            lat = torch.full_like(lat, 0.5)
+
+        rgb_np = (lat.numpy() * 255).clip(0, 255).astype(np.uint8)
+        preview = Image.fromarray(rgb_np)
+        return preview.resize((size, size), Image.LANCZOS)
+
+    except Exception:
+        return Image.new("RGB", (size, size), (40, 40, 60))
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +175,8 @@ class DatasetSynthesizer:
         guidance_scale: float = 5.0,
         num_inference_steps: int = 50,
         seed: Optional[int] = None,
+        preview_callback: Optional[Callable[[int, int, Image.Image], None]] = None,
+        preview_every: int = 2,
     ) -> Image.Image:
         """Generate a single image using Flux 2 DEV with reference images.
 
@@ -151,6 +197,12 @@ class DatasetSynthesizer:
             Denoising steps.  50 gives a good quality/speed balance.
         seed:
             Optional integer seed for reproducibility.
+        preview_callback:
+            Optional ``(step, total_steps, preview_image)`` callable.
+            Called every ``preview_every`` steps with an approximate RGB
+            preview decoded from the latents (near-zero overhead).
+        preview_every:
+            Emit a latent preview every N steps.  Defaults to 2.
 
         Returns
         -------
@@ -176,7 +228,21 @@ class DatasetSynthesizer:
         if seed is not None:
             generator = torch.Generator(device="cpu").manual_seed(seed)
 
-        result = self.pipe(
+        # Build step callback for latent previews
+        step_callback = None
+        if preview_callback is not None:
+            def step_callback(pipe, step_index, timestep, callback_kwargs):
+                if (step_index + 1) % preview_every == 0:
+                    try:
+                        latents = callback_kwargs.get("latents")
+                        if latents is not None:
+                            preview = _latents_to_preview(latents)
+                            preview_callback(step_index + 1, num_inference_steps, preview)
+                    except Exception:
+                        pass  # Preview failure must never block generation
+                return callback_kwargs
+
+        pipe_kwargs: dict = dict(
             prompt=prompt,
             image=reference_images,
             width=width,
@@ -184,7 +250,13 @@ class DatasetSynthesizer:
             guidance_scale=guidance_scale,
             num_inference_steps=num_inference_steps,
             generator=generator,
-        ).images[0]
+        )
+
+        if step_callback is not None:
+            pipe_kwargs["callback_on_step_end"] = step_callback
+            pipe_kwargs["callback_on_step_end_tensor_inputs"] = ["latents"]
+
+        result = self.pipe(**pipe_kwargs).images[0]
 
         return result
 
@@ -200,6 +272,7 @@ class DatasetSynthesizer:
         start_from: int = 0,
         progress_callback: Optional[Callable[[int, int], None]] = None,
         num_inference_steps: int = 50,
+        preview_callback: Optional[Callable[[int, int, int, Image.Image], None]] = None,
     ) -> list[str]:
         """Generate a full training dataset and save it to ``output_dir``.
 
@@ -219,6 +292,10 @@ class DatasetSynthesizer:
             Resume index (0-based).
         progress_callback:
             Optional ``(current: int, total: int)`` callable.
+        preview_callback:
+            Optional ``(image_index, step, total_steps, preview_image)``
+            callable.  Fires every 2 denoising steps with a cheap latent
+            preview so the UI can show the image forming in real time.
 
         Returns
         -------
@@ -260,11 +337,18 @@ class DatasetSynthesizer:
 
             logger.debug("[DatasetSynthesizer] Generating image %d/%d — seed=%d", i + 1, num_images, seed)
 
+            # Per-image preview callback closure
+            img_preview_cb = None
+            if preview_callback is not None:
+                def img_preview_cb(step, total, preview, _idx=i):
+                    preview_callback(_idx, step, total, preview)
+
             image = self.generate_image(
                 prompt=prompt,
                 reference_images=reference_images,
                 seed=seed,
                 num_inference_steps=num_inference_steps,
+                preview_callback=img_preview_cb,
             )
 
             filename = f"img_{i + 1:03d}.png"

@@ -339,12 +339,13 @@ def _run_pipeline(
 ) -> None:
     """Full pipeline: model check → multi-view → synthesize → caption → train."""
 
-    def emit(event_type: str, data: dict) -> None:
+    def emit(event_type: str, data: dict, ephemeral: bool = False) -> None:
         event = {"type": event_type, "data": data}
         with _jobs_lock:
             job = _jobs.get(job_id)
             if job:
-                job["history"].append(event)
+                if not ephemeral:
+                    job["history"].append(event)
                 for sub_q in job["subscribers"]:
                     sub_q.put(event)
 
@@ -503,6 +504,20 @@ def _run_pipeline(
                     "url": f"/api/images/{job_id}/dataset/{filename}",
                 })
 
+            def synthesis_preview(image_index: int, step: int, total_steps: int, preview_img) -> None:
+                """Send a latent preview as base64 JPEG via ephemeral SSE."""
+                import base64
+                import io as _io
+                buf = _io.BytesIO()
+                preview_img.save(buf, format="JPEG", quality=60)
+                b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                emit("diffusion_preview", {
+                    "index": image_index,
+                    "step": step,
+                    "total_steps": total_steps,
+                    "preview": f"data:image/jpeg;base64,{b64}",
+                }, ephemeral=True)
+
             synth.synthesize_dataset(
                 reference_images=view_images,
                 output_dir=dataset_dir,
@@ -510,6 +525,7 @@ def _run_pipeline(
                 start_from=0,
                 progress_callback=synthesis_progress,
                 num_inference_steps=params["inference_steps"],
+                preview_callback=synthesis_preview,
             )
             synth.unload_model()
             del synth

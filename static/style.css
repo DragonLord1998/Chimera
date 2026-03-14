@@ -703,6 +703,43 @@ body {
 
 .synthetic-cell.loaded::before { display: none; }
 
+/* Diffusion latent preview overlay */
+.diffusion-preview {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.diffusion-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0.85;
+  filter: contrast(1.1) saturate(1.2);
+  transition: opacity 0.15s ease;
+}
+
+.diffusion-preview-label {
+  position: absolute;
+  bottom: 2px;
+  right: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+/* Hide preview once the final image loads */
+.synthetic-cell.loaded .diffusion-preview { display: none; }
+
 /* ---------------------------------------------------------
    Progress bar
    --------------------------------------------------------- */

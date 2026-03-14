@@ -190,6 +190,34 @@ function onCheckpointEvent(data) {
   addCheckpointRow(data.step, data.images);
 }
 
+function onDiffusionPreview(data) {
+  const cell = document.querySelector(`.synthetic-cell[data-index="${data.index}"]`);
+  if (!cell || cell.classList.contains("loaded")) return;
+
+  // Create or update preview overlay
+  let overlay = cell.querySelector(".diffusion-preview");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.className = "diffusion-preview";
+
+    const img = document.createElement("img");
+    img.className = "diffusion-preview-img";
+    overlay.appendChild(img);
+
+    const label = document.createElement("div");
+    label.className = "diffusion-preview-label";
+    overlay.appendChild(label);
+
+    cell.appendChild(overlay);
+  }
+
+  overlay.querySelector(".diffusion-preview-img").src = data.preview;
+  overlay.querySelector(".diffusion-preview-label").textContent =
+    `${data.step}/${data.total_steps}`;
+
+  activateSection("sectionSynthetic");
+}
+
 function onCompleteEvent(data, evtSource, startBtn) {
   setStatus("Complete!", "done");
 
@@ -240,6 +268,10 @@ function connectToJob(jobId, startBtn) {
     onSyntheticEvent(JSON.parse(e.data), jobId);
   });
 
+  evtSource.addEventListener("diffusion_preview", e => {
+    onDiffusionPreview(JSON.parse(e.data));
+  });
+
   evtSource.addEventListener("progress", e => {
     onProgressEvent(JSON.parse(e.data));
   });
@@ -279,7 +311,7 @@ function connectToJob(jobId, startBtn) {
     }
   }, 30_000);
 
-  ["stage", "view", "synthetic", "progress", "checkpoint", "complete", "heartbeat"].forEach(
+  ["stage", "view", "synthetic", "diffusion_preview", "progress", "checkpoint", "complete", "heartbeat"].forEach(
     name => evtSource.addEventListener(name, () => { lastActivity = Date.now(); })
   );
 
