@@ -39,6 +39,9 @@ pip install --break-system-packages -U git+https://github.com/huggingface/diffus
 # Re-install Flask and other deps that may have been clobbered by upgrades
 pip install --ignore-installed --break-system-packages flask pillow google-genai sentencepiece || true
 
+# Fix numpy/scipy binary incompatibility (scipy compiled against older numpy)
+pip install --break-system-packages --no-cache-dir --force-reinstall scipy || true
+
 # Verify critical import
 echo "[Chimera] Verifying Flux2KleinKVPipeline import..."
 python3 -c "from diffusers import Flux2KleinKVPipeline; print('[Chimera] Flux2KleinKVPipeline — OK')" || echo "[Chimera] WARNING: Flux2KleinKVPipeline not available — Klein 9B KV will not work"
