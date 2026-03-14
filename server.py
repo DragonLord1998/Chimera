@@ -11,10 +11,13 @@ Routes:
 
 from __future__ import annotations
 
+import os
+os.environ["USE_TF"] = "0"
+os.environ["USE_TORCH"] = "1"
+
 import datetime
 import gc
 import json
-import os
 import queue
 import sys
 import threading
