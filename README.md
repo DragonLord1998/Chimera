@@ -16,13 +16,13 @@ Single-image to character LoRA pipeline. Upload one character image, get a train
 ```bash
 git clone https://github.com/DragonLord1998/Chimera.git /workspace/Chimera
 cd /workspace/Chimera
-pip install --break-system-packages -r requirements.txt
+pip install --ignore-installed --break-system-packages -r requirements.txt
 git clone --depth 1 https://github.com/ostris/ai-toolkit.git
-pip install --break-system-packages -r ai-toolkit/requirements.txt
+pip install --ignore-installed --break-system-packages -r ai-toolkit/requirements.txt
 python3 server.py
 ```
 
-> **Note:** RunPod images ship system-managed Python packages that can block installs. The `--break-system-packages` flag is required to work around this.
+> **Note:** RunPod images have system-managed Python packages (e.g. `blinker`) that block pip installs. Both `--ignore-installed` and `--break-system-packages` flags are required.
 
 Open port **7860** in your RunPod pod template. Access the UI at `http://<your-pod-ip>:7860`.
 
