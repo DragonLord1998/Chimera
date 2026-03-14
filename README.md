@@ -6,7 +6,7 @@ Single-image to character LoRA pipeline. Upload one character image, get a train
 
 ## Requirements
 
-- **GPU**: NVIDIA A40 (48GB VRAM) recommended
+- **GPU**: NVIDIA RTX PRO 6000 (96GB VRAM) recommended
 - **Python**: 3.10+
 - **Gemini API Key**: For multi-view generation
 - **HuggingFace Token**: Optional (only if gated models require it)

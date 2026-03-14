@@ -2,7 +2,7 @@
 synthesize.py — Flux 2 DEV dataset synthesizer.
 
 Uses Flux2Pipeline from diffusers to generate training images from
-reference images.  Designed for RunPod A40 (48 GB VRAM).
+reference images.  Designed for RunPod RTX PRO 6000 (96 GB VRAM).
 
 The pipeline is loaded via ``from_pretrained`` from a local diffusers-format
 directory and uses ``enable_model_cpu_offload()`` to manage VRAM.
@@ -80,7 +80,7 @@ class DatasetSynthesizer:
         """Load the Flux 2 DEV pipeline via ``from_pretrained``.
 
         Uses ``enable_model_cpu_offload()`` to keep peak VRAM usage
-        manageable on an A40 (48 GB).
+        manageable on an RTX PRO 6000 (96 GB).
 
         Raises
         ------
@@ -102,7 +102,7 @@ class DatasetSynthesizer:
             token=self.hf_token,
         )
         # CPU offloading moves each module to GPU only when needed,
-        # keeping peak VRAM below 48 GB for the 32B param model.
+        # keeping peak VRAM manageable for the 32B param model.
         self.pipe.enable_model_cpu_offload()
 
         logger.info("[DatasetSynthesizer] Pipeline ready (cpu offload enabled).")

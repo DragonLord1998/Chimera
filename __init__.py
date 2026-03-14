@@ -2,7 +2,7 @@
 Chimera — ComfyUI custom node package.
 
 Takes a single character image and produces a trained Z-Image LoRA,
-designed to run on RunPod with an NVIDIA A40 (48 GB VRAM).
+designed to run on RunPod with an NVIDIA RTX PRO 6000 (96 GB VRAM).
 """
 
 try:

@@ -12,7 +12,7 @@ Pipeline stages:
 Each stage writes a checkpoint marker on completion.  If the pod restarts
 mid-job, re-queuing the node resumes from the last completed stage.
 
-Designed for RunPod with NVIDIA A40 (48 GB VRAM).
+Designed for RunPod with NVIDIA RTX PRO 6000 (96 GB VRAM).
 """
 
 from __future__ import annotations

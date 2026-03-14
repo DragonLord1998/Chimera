@@ -4,7 +4,7 @@ LoRATrainer — wraps AI Toolkit by Ostris to train a Z-Image LoRA.
 AI Toolkit is consumed as a git-cloned directory (not a pip package), so it is
 imported dynamically by prepending ``toolkit_path`` to ``sys.path`` at runtime.
 
-Typical usage on RunPod A40 (48 GB VRAM):
+Typical usage on RunPod RTX PRO 6000 (96 GB VRAM):
 
     trainer = LoRATrainer(
         model_path="/workspace/models/z_image",
@@ -48,7 +48,7 @@ class LoRATrainer:
 
     Notes:
         - Z-Image uses the ``flowmatch`` noise scheduler (same as Flux).
-        - On an A40 (48 GB VRAM) the model sits at ~12 GB + ~4 GB optimizer
+        - On an RTX PRO 6000 (96 GB VRAM) the model sits at ~12 GB + ~4 GB optimizer
           states, so quantisation is unnecessary.
         - ``cache_latents_to_disk`` pre-encodes images once, skipping the VAE
           on every subsequent training step and saving significant VRAM.
@@ -311,7 +311,7 @@ class LoRATrainer:
                         "model": {
                             "name_or_path": self.model_path,
                             "arch": "zimage",
-                            # A40 has 48 GB VRAM — transformer quantisation is not needed.
+                            # RTX PRO 6000 has 96 GB VRAM — transformer quantisation is not needed.
                             "quantize": False,
                             # Quantise the text encoder to save ~4 GB VRAM.
                             "quantize_te": True,
