@@ -19,6 +19,29 @@ class CaptionGeneratorError(Exception):
     """Raised when captioning fails or the model is not loaded."""
 
 
+def _patch_tokenizer_backend() -> None:
+    """Fix transformers 5.x: TokenizersBackend missing additional_special_tokens.
+
+    Florence 2's custom processor code accesses tokenizer.additional_special_tokens,
+    which was available in transformers 4.x but moved/removed in 5.x's backend
+    refactor.  This patches any Backend class that's missing the attribute.
+    """
+    import sys
+
+    for mod_name, mod in list(sys.modules.items()):
+        if not mod or "transformers" not in mod_name:
+            continue
+        for attr_name in dir(mod):
+            obj = getattr(mod, attr_name, None)
+            if not isinstance(obj, type):
+                continue
+            if "Backend" in attr_name and not hasattr(obj, "additional_special_tokens"):
+                obj.additional_special_tokens = property(
+                    lambda self: getattr(self, "_additional_special_tokens", []),
+                    lambda self, v: setattr(self, "_additional_special_tokens", v),
+                )
+
+
 class CaptionGenerator:
     """
     Wraps Florence 2 Large for detailed image captioning.
@@ -66,10 +89,23 @@ class CaptionGenerator:
 
             print(f"[Chimera] CaptionGenerator: loading Florence 2 from {self.model_path}...")
 
-            self.processor = AutoProcessor.from_pretrained(
-                self.model_path,
-                trust_remote_code=True,
-            )
+            # Load processor — retry with tokenizer backend patch on transformers 5.x
+            try:
+                self.processor = AutoProcessor.from_pretrained(
+                    self.model_path,
+                    trust_remote_code=True,
+                )
+            except AttributeError as attr_err:
+                if "additional_special_tokens" in str(attr_err):
+                    print("[Chimera] Patching tokenizer backend for transformers 5.x...")
+                    _patch_tokenizer_backend()
+                    self.processor = AutoProcessor.from_pretrained(
+                        self.model_path,
+                        trust_remote_code=True,
+                    )
+                else:
+                    raise
+
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_path,
                 torch_dtype=torch.float16 if "cuda" in self.device else torch.float32,
@@ -78,6 +114,8 @@ class CaptionGenerator:
             self.model.eval()  # type: ignore[union-attr]
 
             print("[Chimera] CaptionGenerator: Florence 2 loaded.")
+        except CaptionGeneratorError:
+            raise
         except Exception as exc:
             raise CaptionGeneratorError(
                 f"Failed to load Florence 2 from '{self.model_path}': {exc}"
