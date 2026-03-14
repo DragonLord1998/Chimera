@@ -98,6 +98,7 @@ def patch_florence2():
     2. additional_special_tokens AttributeError in processor
     3. _supports_sdpa missing on Florence2ForConditionalGeneration
     4. torch.linspace meta tensor crash during DaViT init
+    5. EncoderDecoderCache not subscriptable (past_key_values[0][0] → .get_seq_length())
     """
     import glob
 
@@ -184,6 +185,20 @@ def patch_florence2():
             content = content.replace(
                 "torch.linspace(0, drop_path_rate, sum(depths)*2)",
                 'torch.linspace(0, drop_path_rate, sum(depths)*2, device="cpu")',
+            )
+
+            # Fix EncoderDecoderCache not subscriptable (transformers 5.x)
+            content = content.replace(
+                "past_length = past_key_values[0][0].shape[2]",
+                'past_length = past_key_values.get_seq_length() if hasattr(past_key_values, "get_seq_length") else past_key_values[0][0].shape[2]',
+            )
+            content = content.replace(
+                "past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0",
+                'past_key_values_length = (past_key_values.get_seq_length() if hasattr(past_key_values, "get_seq_length") else past_key_values[0][0].shape[2]) if past_key_values is not None else 0',
+            )
+            content = content.replace(
+                "past_key_value = past_key_values[idx] if past_key_values is not None else None",
+                'past_key_value = (past_key_values.self_attention_cache[idx] if hasattr(past_key_values, "self_attention_cache") else past_key_values[idx]) if past_key_values is not None else None',
             )
 
             if content != orig:

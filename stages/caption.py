@@ -224,6 +224,7 @@ class CaptionGenerator:
                     **inputs,
                     max_new_tokens=1024,
                     do_sample=False,
+                    use_cache=False,  # transformers 5.x EncoderDecoderCache breaks Florence 2's custom code
                 )
 
             generated_text = self.processor.batch_decode(  # type: ignore[union-attr]
