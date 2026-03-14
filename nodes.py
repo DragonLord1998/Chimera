@@ -275,7 +275,7 @@ class Chimera:
                 print(f"[Chimera] Resuming generation from image {resume_from + 1}/{num_images}")
 
             synthesizer = DatasetSynthesizer(
-                model_path=model_mgr.get_model_path("flux2"),
+                hf_token=hf_token if hf_token else None,
             )
             synthesizer.load_model()
 

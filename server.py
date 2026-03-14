@@ -276,7 +276,7 @@ def _run_pipeline(
         from stages.synthesize import DatasetSynthesizer
 
         synth = DatasetSynthesizer(
-            model_path=mm.get_model_path("flux2"),
+            hf_token=params["hf_token"],
         )
         synth.load_model()
         stage_msg(2, f"Synthesizing {params['num_images']} training images...")

@@ -21,16 +21,11 @@ from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError
 # ---------------------------------------------------------------------------
 
 MODEL_REGISTRY: dict[str, dict] = {
-    # --- Flux 2 DEV (full diffusers-format repo from Comfy-Org, public) ---
-    "flux2": {
-        "repo_id": "Comfy-Org/flux2-dev",
-        "subdir": "flux2",
-        "description": "Flux 2 DEV (diffusers format, includes transformer + VAE + text encoder)",
-        "snapshot": True,
-        "ignore_patterns": ["split_files/**"],
-        "ready_subdir": "transformer",
-        "size_hint": "~25 GB",
-    },
+    # --- Flux 2 DEV is NOT pre-downloaded here. ---
+    # It uses a gated BFL repo (black-forest-labs/FLUX.2-dev) and is loaded
+    # directly via Flux2Pipeline.from_pretrained() which handles download
+    # and caching through HuggingFace Hub. HF token is required.
+    #
     # --- Florence 2 (captioning) ---
     "florence2": {
         "repo_id": "microsoft/Florence-2-large",

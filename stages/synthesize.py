@@ -44,20 +44,21 @@ class DatasetSynthesizer:
 
     Parameters
     ----------
-    model_path:
-        Path to the local diffusers-format Flux 2 DEV directory (the
-        snapshot downloaded by ModelManager, containing ``transformer/``,
-        ``vae/``, ``text_encoder/``, etc.).
+    hf_token:
+        HuggingFace access token.  Required because ``black-forest-labs/FLUX.2-dev``
+        is a gated repository.
     device:
         Torch device string.  Defaults to ``"cuda"``.
     """
 
+    REPO_ID: str = "black-forest-labs/FLUX.2-dev"
+
     def __init__(
         self,
-        model_path: str,
+        hf_token: Optional[str] = None,
         device: str = "cuda",
     ) -> None:
-        self.model_path = model_path
+        self.hf_token = hf_token
         self.device = device
         self.pipe: Optional[Flux2Pipeline] = None  # type: ignore[type-arg]
 
@@ -83,11 +84,12 @@ class DatasetSynthesizer:
             logger.debug("[DatasetSynthesizer] Pipeline already loaded — skipping.")
             return
 
-        logger.info("[DatasetSynthesizer] Loading Flux 2 DEV pipeline from %s ...", self.model_path)
+        logger.info("[DatasetSynthesizer] Loading Flux 2 DEV pipeline from %s ...", self.REPO_ID)
 
         self.pipe = Flux2Pipeline.from_pretrained(
-            self.model_path,
+            self.REPO_ID,
             torch_dtype=torch.bfloat16,
+            token=self.hf_token,
         )
         # CPU offloading moves each module to GPU only when needed,
         # keeping peak VRAM below 48 GB for the 32B param model.

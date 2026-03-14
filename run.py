@@ -85,7 +85,7 @@ def main():
         resume_from = ckpt.get_resume_point("stage2_generation")
 
         synth = DatasetSynthesizer(
-            model_path=model_mgr.get_model_path("flux2"),
+            hf_token=args.hf_token or None,
         )
         synth.load_model()
 
