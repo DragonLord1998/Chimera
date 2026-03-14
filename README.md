@@ -17,11 +17,12 @@ Single-image to character LoRA pipeline. Upload one character image, get a train
 git clone https://github.com/DragonLord1998/Chimera.git /workspace/Chimera
 cd /workspace/Chimera
 pip install --ignore-installed --break-system-packages -r requirements.txt
+git clone --depth 1 https://github.com/ostris/ai-toolkit.git
+pip install --ignore-installed --break-system-packages -r ai-toolkit/requirements.txt
+# These MUST run after ai-toolkit install (it downgrades transformers)
 pip install --ignore-installed --break-system-packages -U transformers diffusers
 pip install --force-reinstall --break-system-packages --no-cache-dir scipy
 python3 fix_transformers.py
-git clone --depth 1 https://github.com/ostris/ai-toolkit.git
-pip install --ignore-installed --break-system-packages -r ai-toolkit/requirements.txt
 python3 server.py
 ```
 
