@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chimera</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="noise"></div>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="logo-mark">
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+          <polygon points="14,2 26,9 26,19 14,26 2,19 2,9" stroke="#7c5cfc" stroke-width="1.5" fill="none"/>
+          <polygon points="14,7 21,11.5 21,16.5 14,21 7,16.5 7,11.5" fill="#7c5cfc" opacity="0.25"/>
+          <circle cx="14" cy="14" r="3" fill="#7c5cfc"/>
+        </svg>
+      </div>
+      <span class="logo-text">Chimera</span>
+      <span class="header-badge">Z-Image</span>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- Hero -->
+    <section class="hero">
+      <h1 class="hero-title">Train a character LoRA<br><span class="accent">from one image.</span></h1>
+      <p class="hero-sub">Upload a character reference &rarr; Gemini generates multi-view sheets &rarr; Flux 2 synthesizes a training dataset &rarr; Z-Image trains your LoRA.</p>
+    </section>
+
+    <!-- Upload -->
+    <section class="section">
+      <div class="section-label">
+        <span class="step-num">01</span>
+        <span>Input Image</span>
+      </div>
+      <div class="upload-area" id="uploadArea">
+        <input type="file" id="imageInput" accept="image/*" hidden>
+        <div class="upload-inner" id="uploadInner">
+          <div class="upload-icon">
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+              <rect x="1" y="1" width="38" height="38" rx="8" stroke="currentColor" stroke-width="1.5" stroke-dasharray="4 3"/>
+              <path d="M20 14v12M14 20l6-6 6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p class="upload-text">Drop character image here</p>
+          <p class="upload-sub">or click to browse &bull; PNG, JPG, WEBP</p>
+        </div>
+        <img id="previewImage" class="preview-image" hidden alt="preview">
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section class="section">
+      <div class="section-label">
+        <span class="step-num">02</span>
+        <span>Settings</span>
+      </div>
+      <div class="settings-grid">
+        <div class="setting-group">
+          <label class="setting-label" for="triggerWord">Trigger Word</label>
+          <input class="setting-input" type="text" id="triggerWord" value="chrx" placeholder="chrx" autocomplete="off" spellcheck="false">
+          <span class="setting-hint">Unique token for this character</span>
+        </div>
+        <div class="setting-group wide">
+          <label class="setting-label" for="geminiKey">Gemini API Key <span class="required">*</span></label>
+          <input class="setting-input" type="password" id="geminiKey" placeholder="AIza..." autocomplete="off">
+          <span class="setting-hint">Used for multi-view generation</span>
+        </div>
+        <div class="setting-group wide">
+          <label class="setting-label" for="hfToken">HuggingFace Token</label>
+          <input class="setting-input" type="password" id="hfToken" placeholder="hf_..." autocomplete="off">
+          <span class="setting-hint">Required for gated models</span>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label" for="numImages">Training Images</label>
+          <input class="setting-input" type="number" id="numImages" value="25" min="10" max="50">
+          <span class="setting-hint">10 – 50 recommended</span>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label" for="loraRank">LoRA Rank</label>
+          <input class="setting-input" type="number" id="loraRank" value="16" min="4" max="64" step="4">
+          <span class="setting-hint">Higher = more detail, larger file</span>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label" for="loraSteps">Training Steps</label>
+          <input class="setting-input" type="number" id="loraSteps" value="1500" min="250" max="5000" step="250">
+          <span class="setting-hint">1000 – 2000 typical</span>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label" for="learningRate">Learning Rate</label>
+          <input class="setting-input" type="number" id="learningRate" value="0.0001" step="0.00001" min="0.000001">
+          <span class="setting-hint">Default: 1e-4</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Start -->
+    <section class="section start-section">
+      <button class="start-btn" id="startBtn">
+        <span class="start-btn-label">Generate Character LoRA</span>
+        <span class="start-btn-icon">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M6 3.5L12.5 9 6 14.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </button>
+      <div id="statusChip" class="status-chip status-idle">
+        <span class="status-dot"></span>
+        <span id="statusText">Idle</span>
+      </div>
+    </section>
+
+    <!-- Multi-view -->
+    <section class="section pipeline-section" id="sectionViews">
+      <div class="section-label">
+        <span class="step-num">03</span>
+        <span>Multi-View Generation</span>
+        <span class="section-tag">Gemini</span>
+      </div>
+      <div class="views-row">
+        <div class="view-card">
+          <div class="view-placeholder" id="viewLeft">
+            <div class="placeholder-inner">
+              <div class="placeholder-icon">L</div>
+              <span>Left Side Fullbody</span>
+            </div>
+          </div>
+        </div>
+        <div class="view-card">
+          <div class="view-placeholder" id="viewFront">
+            <div class="placeholder-inner">
+              <div class="placeholder-icon">F</div>
+              <span>Front Face</span>
+            </div>
+          </div>
+        </div>
+        <div class="view-card">
+          <div class="view-placeholder" id="viewRight">
+            <div class="placeholder-inner">
+              <div class="placeholder-icon">R</div>
+              <span>Right Side Fullbody</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Synthetic images -->
+    <section class="section pipeline-section" id="sectionSynthetic">
+      <div class="section-label">
+        <span class="step-num">04</span>
+        <span>Synthetic Training Images</span>
+        <span class="section-tag">Flux 2</span>
+        <span class="section-count" id="syntheticCount">0 / 25</span>
+      </div>
+      <div class="synthetic-grid" id="syntheticGrid">
+        <!-- Populated by app.js -->
+      </div>
+    </section>
+
+    <!-- Training progress -->
+    <section class="section pipeline-section" id="sectionTraining">
+      <div class="section-label">
+        <span class="step-num">05</span>
+        <span>LoRA Training</span>
+        <span class="section-tag">Z-Image</span>
+        <span class="section-count mono" id="progressText">0 / 1500</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+        <div class="progress-glow" id="progressGlow" style="left: 0%"></div>
+      </div>
+    </section>
+
+    <!-- Checkpoint samples -->
+    <section class="section pipeline-section" id="sectionCheckpoints">
+      <div class="section-label">
+        <span class="step-num">06</span>
+        <span>Checkpoint Samples</span>
+        <span class="section-hint">5 samples generated every 500 steps</span>
+      </div>
+      <div id="checkpointContainer">
+        <!-- Rows inserted dynamically -->
+      </div>
+    </section>
+
+    <!-- Output -->
+    <section class="section output-section" id="outputSection" hidden>
+      <div class="output-card">
+        <div class="output-header">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M10 2v10M6 8l4 4 4-4" stroke="#7c5cfc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M3 14v2a1 1 0 001 1h12a1 1 0 001-1v-2" stroke="#7c5cfc" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>LoRA Ready</span>
+        </div>
+        <div class="output-path mono" id="outputPath">—</div>
+        <a id="downloadLink" class="download-btn" href="#">
+          Download .safetensors
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M7 1v8M3.5 6l3.5 3.5L10.5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M1 11v1a1 1 0 001 1h10a1 1 0 001-1v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </a>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site-footer">
+    <span>Chimera &mdash; Z-Image De-Turbo &times; Flux 2 DEV &times; Florence 2</span>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
