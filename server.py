@@ -533,6 +533,31 @@ def _run_pipeline(
                 })
             stage_msg(2, f"Dataset loaded from zip — {len(dataset_imgs)} images.")
 
+            # Upscale uploaded dataset with SeedVR2 if available
+            if os.path.isdir(SEEDVR2_PATH):
+                stage_msg(2, "Upscaling uploaded dataset to 2048px with SeedVR2 7B...")
+                from stages.upscale import ImageUpscaler
+
+                def upscale_progress_zip(current: int, total: int) -> None:
+                    stage_msg(2, f"Upscaling image {current}/{total}...")
+
+                def upscale_image_done_zip(index: int, orig_rel: str, upscaled_rel: str) -> None:
+                    emit("upscaled", {
+                        "index": index,
+                        "original_url": f"/api/images/{job_id}/dataset/{orig_rel}",
+                        "upscaled_url": f"/api/images/{job_id}/dataset/{upscaled_rel}",
+                    })
+
+                upscaler = ImageUpscaler(cli_dir=SEEDVR2_PATH)
+                upscaler.upscale_dataset(
+                    dataset_dir=dataset_dir,
+                    target_resolution=2048,
+                    progress_callback=upscale_progress_zip,
+                    image_callback=upscale_image_done_zip,
+                )
+                del upscaler
+                gc.collect()
+
             # Check if captions exist — if not, run Florence 2
             caption_files = [
                 f for f in os.listdir(dataset_dir)

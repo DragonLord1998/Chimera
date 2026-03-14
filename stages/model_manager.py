@@ -179,6 +179,9 @@ class ModelManager:
     def is_model_ready(self, model_key: str) -> bool:
         """Return True if the model file or snapshot directory already exists.
 
+        For sharded models (those with a ``.safetensors.index.json``), also
+        verifies that every referenced shard file is present on disk.
+
         Parameters
         ----------
         model_key:
@@ -196,9 +199,45 @@ class ModelManager:
                 check = os.path.join(path, spec["ready_subdir"])
                 return os.path.isdir(check) and bool(os.listdir(check))
             # Consider ready if the directory exists and is non-empty
-            return os.path.isdir(path) and bool(os.listdir(path))
+            if not os.path.isdir(path) or not os.listdir(path):
+                return False
+            # Verify sharded model completeness: if an index.json exists,
+            # check that all referenced shard files are present.
+            if not self._verify_shards(path):
+                return False
+            return True
 
         return os.path.isfile(path)
+
+    def _verify_shards(self, model_dir: str) -> bool:
+        """Walk model_dir (recursively) looking for ``*.index.json`` files.
+
+        For each index found, verify every shard it references exists on disk.
+        Returns False if any shard is missing.
+        """
+        import json
+
+        for dirpath, _dirs, files in os.walk(model_dir):
+            for fname in files:
+                if not fname.endswith(".index.json"):
+                    continue
+                index_path = os.path.join(dirpath, fname)
+                try:
+                    with open(index_path, "r") as fh:
+                        index_data = json.load(fh)
+                    weight_map = index_data.get("weight_map", {})
+                    shard_files = set(weight_map.values())
+                    for shard in shard_files:
+                        shard_path = os.path.join(dirpath, shard)
+                        if not os.path.isfile(shard_path):
+                            print(
+                                f"[ModelManager] Missing shard: {shard_path} "
+                                f"(referenced by {index_path})"
+                            )
+                            return False
+                except (json.JSONDecodeError, OSError) as exc:
+                    print(f"[ModelManager] WARNING: Could not verify {index_path}: {exc}")
+        return True
 
     # ------------------------------------------------------------------
     # Internal helpers
