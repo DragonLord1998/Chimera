@@ -306,8 +306,13 @@ body {
   grid-column: span 2;
 }
 
+.setting-group.full-width {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 600px) {
   .setting-group.wide { grid-column: span 1; }
+  .setting-group.full-width { grid-column: span 1; }
 }
 
 .setting-label {
@@ -323,6 +328,13 @@ body {
 
 .required {
   color: var(--accent);
+}
+
+.optional {
+  color: var(--text-muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .setting-input {
@@ -352,6 +364,14 @@ body {
 .setting-input[type="number"]::-webkit-inner-spin-button,
 .setting-input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
+}
+
+.setting-textarea {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.6;
 }
 
 .setting-hint {

@@ -77,7 +77,16 @@ def start_pipeline():
         "lora_rank": int(request.form.get("lora_rank", 16)),
         "lora_steps": int(request.form.get("lora_steps", 1500)),
         "learning_rate": float(request.form.get("learning_rate", 1e-4)),
+        "sample_prompts": None,
     }
+
+    # Parse sample prompts — one per line, replace TRIGGER with trigger word.
+    raw_prompts = request.form.get("sample_prompts", "").strip()
+    if raw_prompts:
+        lines = [l.strip() for l in raw_prompts.splitlines() if l.strip()]
+        params["sample_prompts"] = [
+            l.replace("TRIGGER", params["trigger_word"]) for l in lines
+        ]
 
     if not params["gemini_key"]:
         return jsonify({"error": "Gemini API key is required"}), 400
@@ -393,6 +402,7 @@ def _run_pipeline(
             steps=total_steps,
             save_every=save_every,
             sample_every=save_every,
+            sample_prompts=params["sample_prompts"],
         )
 
         _stop_watcher.set()

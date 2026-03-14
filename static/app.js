@@ -306,6 +306,10 @@ document.addEventListener("DOMContentLoaded", () => {
     formData.append("lora_rank", document.getElementById("loraRank").value);
     formData.append("lora_steps", totalSteps);
     formData.append("learning_rate", document.getElementById("learningRate").value);
+    const samplePromptsRaw = document.getElementById("samplePrompts").value.trim();
+    if (samplePromptsRaw) {
+      formData.append("sample_prompts", samplePromptsRaw);
+    }
 
     let jobId;
     try {

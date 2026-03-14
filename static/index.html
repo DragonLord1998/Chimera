@@ -98,6 +98,11 @@
           <input class="setting-input" type="number" id="learningRate" value="0.0001" step="0.00001" min="0.000001">
           <span class="setting-hint">Default: 1e-4</span>
         </div>
+        <div class="setting-group full-width">
+          <label class="setting-label" for="samplePrompts">Sample Prompts <span class="optional">(optional)</span></label>
+          <textarea class="setting-input setting-textarea" id="samplePrompts" rows="4" placeholder="a portrait of TRIGGER, looking at the camera, studio lighting&#10;TRIGGER walking in a park, natural lighting, full body shot" spellcheck="false"></textarea>
+          <span class="setting-hint">One prompt per line. TRIGGER is replaced with your trigger word. Leave empty for defaults.</span>
+        </div>
       </div>
     </section>
 
