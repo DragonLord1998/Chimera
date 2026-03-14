@@ -87,6 +87,23 @@ class CaptionGenerator:
         try:
             from transformers import AutoModelForCausalLM, AutoProcessor  # type: ignore[import]
 
+            # Patch Florence 2 config: forced_bos_token_id removed in transformers 5.x
+            # Florence 2's custom config references it but the base class dropped it.
+            try:
+                from transformers import GenerationConfig as _GC
+                if not hasattr(_GC, "forced_bos_token_id"):
+                    _GC.forced_bos_token_id = None
+            except Exception:
+                pass
+
+            # Also patch at the PretrainedConfig level
+            try:
+                from transformers import PretrainedConfig as _PC
+                if not hasattr(_PC, "forced_bos_token_id"):
+                    _PC.forced_bos_token_id = None
+            except Exception:
+                pass
+
             print(f"[Chimera] CaptionGenerator: loading Florence 2 from {self.model_path}...")
 
             # Load processor — multiple fallbacks for transformers 5.x compat
@@ -95,9 +112,24 @@ class CaptionGenerator:
                 self.processor = AutoProcessor.from_pretrained(
                     self.model_path, **_load_kwargs,
                 )
-            except (AttributeError, ValueError, OSError) as load_err:
+            except (AttributeError, ValueError, OSError, TypeError) as load_err:
                 err_msg = str(load_err)
-                if "additional_special_tokens" in err_msg:
+                if "forced_bos_token_id" in err_msg:
+                    print("[Chimera] Patching forced_bos_token_id for transformers 5.x...")
+                    # Patch the Florence2LanguageConfig class directly
+                    import sys as _sys
+                    for _mn, _mod in list(_sys.modules.items()):
+                        if not _mod or "florence" not in _mn.lower():
+                            continue
+                        for _an in dir(_mod):
+                            _cls = getattr(_mod, _an, None)
+                            if isinstance(_cls, type) and "Config" in _an:
+                                if not hasattr(_cls, "forced_bos_token_id"):
+                                    _cls.forced_bos_token_id = None
+                    self.processor = AutoProcessor.from_pretrained(
+                        self.model_path, **_load_kwargs,
+                    )
+                elif "additional_special_tokens" in err_msg:
                     print("[Chimera] Patching tokenizer backend for transformers 5.x...")
                     _patch_tokenizer_backend()
                     self.processor = AutoProcessor.from_pretrained(
