@@ -84,6 +84,22 @@ try:
 except Exception:
     pass
 
+# Patch transformers 5.x: load_backbone moved out of backbone_utils.
+# Florence 2's custom modeling code still imports from the old location.
+try:
+    from transformers.utils import backbone_utils as _bb_utils
+    if not hasattr(_bb_utils, "load_backbone"):
+        try:
+            from transformers import load_backbone
+            _bb_utils.load_backbone = load_backbone
+        except ImportError:
+            def _load_backbone(config):
+                from transformers import AutoBackbone
+                return AutoBackbone.from_config(config)
+            _bb_utils.load_backbone = _load_backbone
+except Exception:
+    pass
+
 import datetime
 import gc
 import json
