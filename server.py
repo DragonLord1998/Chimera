@@ -694,6 +694,7 @@ def _run_pipeline(
             seen_checkpoints: set[str] = set()
             seen_samples: set[str] = set()
             step_estimate = 0
+            sample_batch_count = 0
 
             while not _stop_watcher.is_set():
                 time.sleep(3)
@@ -716,26 +717,45 @@ def _run_pipeline(
 
                         emit("progress", {"step": step_estimate, "total": total_steps})
 
-                        # Check for sample images at this checkpoint
-                        if os.path.isdir(samples_dir):
-                            sample_files = sorted(
-                                f for f in os.listdir(samples_dir)
-                                if f.endswith(".png") and f not in seen_samples
+                # Check for sample images independently (AI Toolkit outputs .jpg)
+                if os.path.isdir(samples_dir):
+                    sample_files = sorted(
+                        f for f in os.listdir(samples_dir)
+                        if (f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg"))
+                        and f not in seen_samples
+                    )
+                    if sample_files:
+                        batch: list[str] = []
+                        max_sample_step = 0
+                        for sf in sample_files:
+                            seen_samples.add(sf)
+                            batch.append(
+                                f"/api/images/{job_id}/output/{output_name}/samples/{sf}"
                             )
-                            # Group into batches of 5 (one per sample prompt)
-                            batch: list[str] = []
-                            for sf in sample_files:
-                                seen_samples.add(sf)
-                                batch.append(
-                                    f"/api/images/{job_id}/output/{output_name}/samples/{sf}"
-                                )
-                                if len(batch) >= 5:
-                                    break
-                            if batch:
-                                emit("checkpoint", {
-                                    "step": step_estimate,
-                                    "images": batch,
-                                })
+                            # Parse step from filename like {timestamp}__{step:09d}_{idx}.jpg
+                            try:
+                                parts = sf.rsplit(".", 1)[0]  # strip extension
+                                step_part = parts.split("__")[1].split("_")[0]
+                                max_sample_step = max(max_sample_step, int(step_part))
+                            except (IndexError, ValueError):
+                                pass
+
+                        if batch:
+                            # Use parsed step, or estimate from batch count
+                            if max_sample_step > 0:
+                                reported_step = max_sample_step
+                            else:
+                                sample_batch_count += 1
+                                reported_step = sample_batch_count * save_every
+
+                            if reported_step > step_estimate:
+                                step_estimate = reported_step
+                                emit("progress", {"step": step_estimate, "total": total_steps})
+
+                            emit("checkpoint", {
+                                "step": step_estimate,
+                                "images": batch,
+                            })
 
         watcher_thread = threading.Thread(target=_watcher, daemon=True,
                                           name=f"watcher-{job_id}")
