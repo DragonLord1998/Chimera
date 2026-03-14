@@ -17,6 +17,7 @@ os.environ["USE_TORCH"] = "1"
 
 # Mock torchaudio if broken — AI Toolkit imports it but LoRA training doesn't need it.
 # RunPod images often have a version compiled against a different torch, causing OSError.
+import importlib.machinery
 import sys
 import types
 try:
@@ -24,9 +25,13 @@ try:
 except (OSError, ImportError):
     _mock = types.ModuleType("torchaudio")
     _mock.__path__ = []
+    _mock.__version__ = "0.0.0"
+    _mock.__spec__ = importlib.machinery.ModuleSpec("torchaudio", None)
     sys.modules["torchaudio"] = _mock
     for _sub in ("transforms", "functional", "_extension", "_extension.utils"):
-        sys.modules[f"torchaudio.{_sub}"] = types.ModuleType(f"torchaudio.{_sub}")
+        _sub_mod = types.ModuleType(f"torchaudio.{_sub}")
+        _sub_mod.__spec__ = importlib.machinery.ModuleSpec(f"torchaudio.{_sub}", None)
+        sys.modules[f"torchaudio.{_sub}"] = _sub_mod
 
 import datetime
 import gc
