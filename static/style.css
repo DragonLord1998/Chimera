@@ -532,7 +532,7 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-top: 8px;
 }
 
 .views-zip-label {

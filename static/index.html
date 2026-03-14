@@ -72,6 +72,14 @@
           <label class="setting-label" for="geminiKey">Gemini API Key <span class="required">*</span></label>
           <input class="setting-input" type="password" id="geminiKey" placeholder="AIza..." autocomplete="off">
           <span class="setting-hint">Used for multi-view generation</span>
+          <div class="views-upload-row">
+            <label class="views-zip-label" for="viewsZipInput">
+              <span>Or upload previous views (.zip) to skip Gemini</span>
+              <input type="file" id="viewsZipInput" accept=".zip" hidden>
+              <span class="views-zip-name" id="viewsZipName"></span>
+            </label>
+            <button class="views-zip-clear" id="viewsZipClear" hidden>&times;</button>
+          </div>
         </div>
         <div class="setting-group wide">
           <label class="setting-label" for="hfToken">HuggingFace Token <span class="required">*</span></label>
@@ -129,14 +137,6 @@
         <span>Multi-View Generation</span>
         <span class="section-tag">Gemini</span>
         <a id="downloadViewsBtn" class="section-action" href="#" hidden>Download ZIP</a>
-      </div>
-      <div class="views-upload-row">
-        <label class="views-zip-label" for="viewsZipInput">
-          <span>Or upload previous views (.zip)</span>
-          <input type="file" id="viewsZipInput" accept=".zip" hidden>
-          <span class="views-zip-name" id="viewsZipName"></span>
-        </label>
-        <button class="views-zip-clear" id="viewsZipClear" hidden>&times;</button>
       </div>
       <div class="views-row">
         <div class="view-card">
