@@ -101,11 +101,20 @@ def patch_florence2():
     """
     import glob
 
-    # Find Florence 2 files in both model dir and HF cache
+    # Find Florence 2 files in model dir and all possible HF cache locations
     search_paths = [
         "/workspace/models/florence2",
         os.path.expanduser("~/.cache/huggingface/modules/transformers_modules/florence2"),
+        "/workspace/.cache/huggingface/modules/transformers_modules/florence2",
+        "/root/.cache/huggingface/modules/transformers_modules/florence2",
     ]
+    # Also check HF_HOME / TRANSFORMERS_CACHE env vars
+    for env_var in ("HF_HOME", "TRANSFORMERS_CACHE", "HUGGINGFACE_HUB_CACHE"):
+        env_val = os.environ.get(env_var)
+        if env_val:
+            candidate = os.path.join(env_val, "modules", "transformers_modules", "florence2")
+            if candidate not in search_paths:
+                search_paths.append(candidate)
 
     patched = 0
 
