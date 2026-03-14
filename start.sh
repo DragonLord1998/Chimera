@@ -11,10 +11,10 @@ echo "[Chimera] Patching transformers..."
 python3 fix_transformers.py
 
 echo "[Chimera] Installing/upgrading dependencies..."
-pip install --break-system-packages flask pillow google-genai sentencepiece || true
-pip install --break-system-packages -U "transformers>=5.0" || true
+pip install --ignore-installed --break-system-packages flask pillow google-genai sentencepiece || true
+pip install --ignore-installed --break-system-packages -U "transformers>=5.0" || true
 echo "[Chimera] Installing diffusers from GitHub main (required for Klein 9B KV)..."
-pip install --break-system-packages -U git+https://github.com/huggingface/diffusers.git || true
+pip install --ignore-installed --break-system-packages -U git+https://github.com/huggingface/diffusers.git || true
 
 # Clone AI Toolkit if not present
 if [ ! -d "ai-toolkit" ]; then
@@ -37,7 +37,7 @@ echo "[Chimera] Re-installing diffusers from GitHub main (post ai-toolkit)..."
 pip install --break-system-packages -U git+https://github.com/huggingface/diffusers.git || true
 
 # Re-install Flask and other deps that may have been clobbered by upgrades
-pip install --break-system-packages flask pillow google-genai sentencepiece || true
+pip install --ignore-installed --break-system-packages flask pillow google-genai sentencepiece || true
 
 # Verify critical import
 echo "[Chimera] Verifying Flux2KleinKVPipeline import..."
