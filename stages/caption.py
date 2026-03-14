@@ -147,9 +147,11 @@ class CaptionGenerator:
                 else:
                     raise
 
+            # Florence 2 is small (~2 GB) — use float32 to avoid dtype mismatches
+            # between input tensors (float32) and model weights (float16).
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_path,
-                torch_dtype=torch.float16 if "cuda" in self.device else torch.float32,
+                torch_dtype=torch.float32,
                 trust_remote_code=True,
             ).to(self.device)
             self.model.eval()  # type: ignore[union-attr]
