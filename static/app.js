@@ -521,6 +521,19 @@ document.addEventListener("DOMContentLoaded", () => {
     openComparison(cell.dataset.originalUrl, cell.dataset.upscaledUrl);
   });
 
+  // When synthesizer changes, lock inference steps for Klein
+  document.getElementById("synthesizer").addEventListener("change", e => {
+    const stepsEl = document.getElementById("inferenceSteps");
+    if (e.target.value === "klein_kv") {
+      stepsEl.dataset.prevValue = stepsEl.value;
+      stepsEl.value = 4;
+      stepsEl.disabled = true;
+    } else {
+      stepsEl.value = stepsEl.dataset.prevValue || 50;
+      stepsEl.disabled = false;
+    }
+  });
+
   // Keep grid in sync with numImages setting
   document.getElementById("numImages").addEventListener("input", e => {
     const n = Math.max(10, Math.min(50, parseInt(e.target.value, 10) || 25));
@@ -611,6 +624,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const synthTag = document.getElementById("synthesizerTag");
     if (synthTag) {
       synthTag.textContent = synthChoice === "klein_kv" ? "Klein 9B" : "Flux 2";
+    }
+
+    // Klein uses fixed 4 steps — restore inference steps value after submit
+    if (synthChoice === "klein_kv") {
+      document.getElementById("inferenceSteps").value = 4;
     }
 
     startBtn.disabled = true;

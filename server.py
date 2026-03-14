@@ -678,7 +678,7 @@ def _run_pipeline(
                     num_images=num_images,
                     start_from=0,
                     progress_callback=synthesis_progress,
-                    num_inference_steps=params["inference_steps"],
+                    num_inference_steps=4,  # Klein is distilled to exactly 4 steps — fixed
                     preview_callback=synthesis_preview,
                 )
                 synth.unload_model()
