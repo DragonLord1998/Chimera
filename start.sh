@@ -42,6 +42,28 @@ pip install --ignore-installed --break-system-packages flask pillow google-genai
 # Fix numpy/scipy binary incompatibility (scipy compiled against older numpy)
 pip install --break-system-packages --no-cache-dir --force-reinstall scipy || true
 
+# Patch AI Toolkit for transformers 5.x: ViTHybrid classes removed
+if [ -f "ai-toolkit/toolkit/custom_adapter.py" ]; then
+    sed -i 's/^from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification$/try:\n    from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification\nexcept ImportError:\n    ViTHybridImageProcessor = None\n    ViTHybridForImageClassification = None/' ai-toolkit/toolkit/custom_adapter.py 2>/dev/null
+    # If sed multiline fails, use python
+    python3 -c "
+p = 'ai-toolkit/toolkit/custom_adapter.py'
+with open(p) as f: c = f.read()
+old = 'from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification'
+new = '''try:
+    from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification
+except ImportError:
+    ViTHybridImageProcessor = None
+    ViTHybridForImageClassification = None'''
+if old in c and 'except ImportError' not in c.split(old)[0][-50:]:
+    c = c.replace(old, new)
+    with open(p, 'w') as f: f.write(c)
+    print('[Chimera] Patched AI Toolkit: ViTHybrid import')
+else:
+    print('[Chimera] AI Toolkit ViTHybrid: already patched or not found')
+" || true
+fi
+
 # Verify critical import
 echo "[Chimera] Verifying Flux2KleinKVPipeline import..."
 python3 -c "from diffusers import Flux2KleinKVPipeline; print('[Chimera] Flux2KleinKVPipeline — OK')" || echo "[Chimera] WARNING: Flux2KleinKVPipeline not available — Klein 9B KV will not work"
