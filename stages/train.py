@@ -318,8 +318,8 @@ class LoRATrainer:
                             "prompts": sample_prompts,
                             "seed": 42,
                             "walk_seed": True,
-                            "guidance_scale": 4.5 if self.base_model == "flux_krea" else 3.0,
-                            "sample_steps": 28,
+                            "guidance_scale": 4.5 if self.base_model == "flux_krea" else 4.0,
+                            "sample_steps": 50,
                         },
                     }
                 ],
