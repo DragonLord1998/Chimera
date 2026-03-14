@@ -100,6 +100,18 @@ try:
 except Exception:
     pass
 
+# Patch transformers 5.x: TokenizersBackend missing additional_special_tokens.
+# Florence 2's custom processing code accesses this attribute on the tokenizer.
+try:
+    from transformers.tokenization_utils_tokenizers import TokenizersBackend as _TokBackend
+    if not hasattr(_TokBackend, "additional_special_tokens"):
+        _TokBackend.additional_special_tokens = property(
+            lambda self: getattr(self, "_additional_special_tokens", []),
+            lambda self, v: setattr(self, "_additional_special_tokens", v),
+        )
+except ImportError:
+    pass
+
 import datetime
 import gc
 import json
