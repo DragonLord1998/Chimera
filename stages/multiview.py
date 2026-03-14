@@ -168,6 +168,10 @@ class MultiViewGenerator:
                     contents=[prompt, image],
                     config=types.GenerateContentConfig(
                         response_modalities=["TEXT", "IMAGE"],
+                        image_config=types.ImageConfig(
+                            aspect_ratio="3:4",
+                            image_size="2K",
+                        ),
                     ),
                 )
                 return self._extract_image(response, view_name)
