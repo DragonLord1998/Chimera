@@ -80,6 +80,17 @@ MODEL_REGISTRY: dict[str, dict] = {
         "size_hint": "~24 GB",
         "gated": True,
     },
+    # --- FLUX.2 Klein 9B KV (alternative synthesizer) ---
+    # Step-distilled 9B model with KV-cache for fast multi-reference generation.
+    # Downloaded on demand when user selects Klein as synthesizer.
+    "flux2_klein_kv": {
+        "repo_id": "black-forest-labs/FLUX.2-klein-9b-kv",
+        "subdir": "flux2_klein_kv",
+        "description": "FLUX.2 Klein 9B KV (step-distilled, KV-cache for multi-ref)",
+        "snapshot": True,
+        "size_hint": "~29 GB",
+        "gated": True,
+    },
 }
 
 _RETRY_COUNT = 3

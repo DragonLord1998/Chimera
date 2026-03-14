@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Chimera is a standalone Python/Flask web application that trains a character LoRA from a single input image. The full pipeline is automated: Input Image → Gemini Multi-View Generation → Flux 2 DEV Synthetic Dataset → SeedVR2 Upscale → Florence 2 Captioning → LoRA Training.
+Chimera is a standalone Python/Flask web application that trains a character LoRA from a single input image. The full pipeline is automated: Input Image → Gemini Multi-View Generation → Synthesizer (Flux 2 DEV or Klein 9B KV) → SeedVR2 Upscale → Florence 2 Captioning → LoRA Training.
 
 **Target hardware**: NVIDIA RTX PRO 6000 (96 GB VRAM) on RunPod.
 
@@ -13,12 +13,12 @@ server.py (Flask, SSE streaming)
 ├── stages/
 │   ├── model_manager.py    — Auto-downloads models from HuggingFace
 │   ├── multiview.py        — Gemini API multi-view generation (5 views)
-│   ├── synthesize.py       — Flux 2 DEV dataset synthesis (1024px)
+│   ├── synthesize.py       — Dataset synthesis (Flux 2 DEV or Klein 9B KV)
 │   ├── upscale.py          — SeedVR2 7B image upscaling (1024→2048px)
 │   ├── caption.py          — Florence 2 captioning
 │   └── train.py            — AI Toolkit LoRA training wrapper
 ├── utils/
-│   ├── prompt_templates.py — 50 prompt templates (25 original + 25 varied outfit)
+│   ├── prompt_templates.py — Prompt templates (50 for Flux 2 DEV, 50 for Klein 9B KV)
 │   ├── identity_stripper.py— Caption post-processing
 │   └── checkpoint.py       — Checkpoint utilities
 ├── static/
@@ -35,7 +35,10 @@ server.py (Flask, SSE streaming)
 
 1. **Model Download** (Stage 0) — ModelManager downloads required models from HuggingFace
 2. **Multi-View Generation** (Stage 1) — Gemini `gemini-3-pro-image-preview` generates 5 views: left fullbody, front face, right fullbody, face close-up, back fullbody. OR user uploads a views ZIP to skip this.
-3. **Dataset Synthesis** (Stage 2) — Flux 2 DEV (`black-forest-labs/FLUX.2-dev`) generates training images at 1024px using all 5 views as reference images. Real-time latent preview every 2 denoising steps via `callback_on_step_end`.
+3. **Dataset Synthesis** (Stage 2) — User-selectable synthesizer:
+   - **Flux 2 DEV** (`black-forest-labs/FLUX.2-dev`) — 32B params, all 5 views as reference, 50 denoising steps, 1024px output.
+   - **FLUX.2 Klein 9B KV** (`black-forest-labs/FLUX.2-klein-9b-kv`) — 9B params, 4 views (front, face, left, right), 4 steps (step-distilled), KV-cache for 2.5x speedup.
+   Real-time latent preview every 2 denoising steps via `callback_on_step_end`.
 4. **SeedVR2 Upscale** (Stage 2a) — SeedVR2 7B upscales all training images from 1024px → 2048px. Originals preserved in `_originals/` for before/after comparison slider in UI. Called via subprocess (ComfyUI CLI) to avoid dependency conflicts.
 5. **Captioning** (Stage 2b) — Florence 2 Large auto-captions the 2048px dataset. Strips identity traits, prepends trigger word. Skipped if `.txt` caption files already exist.
 6. **LoRA Training** (Stage 3) — AI Toolkit by Ostris trains the LoRA at 2048px. Supports two base models:
@@ -57,6 +60,7 @@ server.py (Flask, SSE streaming)
 
 ### Models & VRAM (96 GB RTX PRO 6000)
 - Flux 2 DEV: ~32B params, loaded via `Flux2Pipeline.from_pretrained()` with `enable_model_cpu_offload()`
+- FLUX.2 Klein 9B KV: ~29 GB, loaded via `Flux2KleinKVPipeline.from_pretrained()` with `enable_model_cpu_offload()`. Downloaded on demand.
 - SeedVR2 7B: ~24 GB for 1024→2048 upscale, one-step diffusion transformer
 - Z-Image De-Turbo: ~12 GB transformer + ~8 GB text encoder. `quantize: false` (enough VRAM), `quantize_te: true` with qfloat8
 - FLUX.1-Krea-dev: ~24 GB. `quantize: false`
@@ -79,15 +83,19 @@ All four subfolders are required by AI Toolkit's `z_image.py` (`AutoTokenizer.fr
 - Noise scheduler: flowmatch
 - Resolution: 2048
 - Caption dropout: 0.05
-- Inference steps (Flux 2 synthesis): 50
-- Guidance scale (Flux 2 synthesis): 5.0
+- Inference steps (Flux 2 DEV synthesis): 50
+- Inference steps (Klein 9B KV synthesis): 4 (step-distilled)
+- Guidance scale (synthesis): 5.0
 - Checkpoint/sample interval: every 250 steps
 - Sample steps: 50, Sample CFG: 4.0 (Z-Image), 4.5 (Flux Krea)
 
 ### Prompt Templates
-- 50 templates total: 25 ORIGINAL_OUTFIT + 25 VARIED_OUTFIT, interleaved
-- All templates reference all 5 input images with specific callouts (e.g. "face details from image 4", "left profile from image 1")
-- `get_prompt_templates(num_images)` picks half from each bank
+- Two template sets: Flux 2 DEV (5 refs) and Klein 9B KV (4 refs)
+- 50 templates each: 25 ORIGINAL_OUTFIT + 25 VARIED_OUTFIT, interleaved
+- Flux 2 DEV templates reference images 1-5 (left, front, right, face, back)
+- Klein templates reference images 1-4 (front, face close-up, left, right)
+- `get_prompt_templates(num_images)` for Flux 2 DEV, `get_prompt_templates_klein(num_images)` for Klein
+- Klein reference selection: `select_klein_references()` picks front, face, left, right (indices 1, 3, 0, 2 from 5 Gemini views)
 
 ### Real-Time Progress
 - **Diffusion preview**: `callback_on_step_end` in Flux 2 pipeline, approximate RGB from first 3 latent channels (no VAE decode), sent as base64 JPEG via ephemeral SSE
@@ -152,6 +160,7 @@ dataset_zip     — Pre-made training dataset ZIP (optional, skips Gemini + Flux
 trigger_word    — Unique token for character (default: "chrx")
 gemini_key      — Gemini API key (required unless views_zip or dataset_zip)
 hf_token        — HuggingFace token (required for gated models)
+synthesizer     — "flux2_dev" or "klein_kv" (default: "flux2_dev")
 base_model      — "zimage" or "flux_krea"
 num_images      — Training images to synthesize (10-50, default 25)
 lora_rank       — LoRA rank (4-64, default 32)
@@ -164,7 +173,7 @@ sample_prompts  — Custom checkpoint sample prompts (one per line)
 ## Dependencies
 
 - Flask, Pillow, google-genai (Gemini), sentencepiece
-- diffusers >= 0.32.0 (Flux2Pipeline)
+- diffusers from GitHub main branch (Flux2Pipeline, Flux2KleinKVPipeline)
 - transformers >= 5.0
 - ai-toolkit (git clone, not pip) — `toolkit.job.run_job(config)`
 - SeedVR2-CLI (git clone) — `inference_cli.py` subprocess
@@ -195,10 +204,12 @@ cd /workspace/Chimera && bash start.sh
 
 # Models directory
 /workspace/models/
-├── florence2/      — Florence 2 Large (~2 GB)
-├── z_image/        — Z-Image De-Turbo (transformer + text_encoder + tokenizer + vae)
-└── flux_krea/      — FLUX.1-Krea-dev (optional)
+├── florence2/        — Florence 2 Large (~2 GB)
+├── z_image/          — Z-Image De-Turbo (transformer + text_encoder + tokenizer + vae)
+├── flux_krea/        — FLUX.1-Krea-dev (optional)
+└── flux2_klein_kv/   — FLUX.2 Klein 9B KV (optional, downloaded on demand)
 
 # Flux 2 DEV is downloaded via HuggingFace Hub cache (gated, requires HF token)
+# Klein 9B KV is downloaded on demand when user selects it as synthesizer
 # SeedVR2 7B weights auto-downloaded by CLI on first run
 ```

@@ -606,6 +606,13 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById(id).classList.remove("active");
     });
 
+    // Update synthesizer tag in UI
+    const synthChoice = document.getElementById("synthesizer").value;
+    const synthTag = document.getElementById("synthesizerTag");
+    if (synthTag) {
+      synthTag.textContent = synthChoice === "klein_kv" ? "Klein 9B" : "Flux 2";
+    }
+
     startBtn.disabled = true;
     setStatus("Starting pipeline...", "running");
 
@@ -618,6 +625,7 @@ document.addEventListener("DOMContentLoaded", () => {
     formData.append("gemini_key", geminiKey);
     formData.append("hf_token", document.getElementById("hfToken").value.trim());
     formData.append("num_images", numImages);
+    formData.append("synthesizer", document.getElementById("synthesizer").value);
     formData.append("base_model", document.getElementById("baseModel").value);
     formData.append("lora_rank", document.getElementById("loraRank").value);
     formData.append("lora_steps", totalSteps);

@@ -200,6 +200,7 @@ def start_pipeline():
         "learning_rate": float(request.form.get("learning_rate", 1e-4)),
         "inference_steps": int(request.form.get("inference_steps", 50)),
         "base_model": request.form.get("base_model", "zimage").strip(),
+        "synthesizer": request.form.get("synthesizer", "flux2_dev").strip(),
         "sample_prompts": None,
     }
 
@@ -260,6 +261,7 @@ def start_pipeline():
             "params": {
                 "num_images": params["num_images"],
                 "lora_steps": params["lora_steps"],
+                "synthesizer": params["synthesizer"],
             },
         }
 
@@ -494,6 +496,8 @@ def _run_pipeline(
 
         # Download models based on selected base model
         base_model = params.get("base_model", "zimage")
+        synthesizer_choice = params.get("synthesizer", "flux2_dev")
+
         if base_model == "flux_krea":
             # Flux Krea only needs its own model + Florence 2 for captioning
             for key in ("florence2", "flux_krea"):
@@ -501,6 +505,12 @@ def _run_pipeline(
                     mm._download_with_retry(key)
         else:
             mm.ensure_all_models()
+
+        # Download Klein 9B KV model on demand if user selected it
+        if synthesizer_choice == "klein_kv":
+            if not mm.is_model_ready("flux2_klein_kv"):
+                stage_msg(0, "Downloading FLUX.2 Klein 9B KV model (~29 GB)...")
+                mm._download_with_retry("flux2_klein_kv")
 
         # ------------------------------------------------------------------
         # Fast path: dataset ZIP provided — skip stages 1 and 2
@@ -622,17 +632,8 @@ def _run_pipeline(
                 pil_input.close()
 
             # ------------------------------------------------------------------
-            # Stage 2 — Dataset synthesis (Flux 2)
+            # Stage 2 — Dataset synthesis (Flux 2 DEV or Klein 9B KV)
             # ------------------------------------------------------------------
-            stage_msg(2, "Loading Flux 2 DEV — this takes a moment...")
-            from stages.synthesize import DatasetSynthesizer
-
-            synth = DatasetSynthesizer(
-                hf_token=params["hf_token"],
-            )
-            synth.load_model()
-            stage_msg(2, f"Synthesizing {params['num_images']} training images...")
-
             num_images = params["num_images"]
 
             def synthesis_progress(current: int, total: int) -> None:
@@ -656,17 +657,55 @@ def _run_pipeline(
                     "preview": f"data:image/jpeg;base64,{b64}",
                 }, ephemeral=True)
 
-            synth.synthesize_dataset(
-                reference_images=view_images,
-                output_dir=dataset_dir,
-                num_images=num_images,
-                start_from=0,
-                progress_callback=synthesis_progress,
-                num_inference_steps=params["inference_steps"],
-                preview_callback=synthesis_preview,
-            )
-            synth.unload_model()
-            del synth
+            if synthesizer_choice == "klein_kv":
+                # --- Klein 9B KV: 4 reference images, 4 steps, KV-cache ---
+                stage_msg(2, "Loading FLUX.2 Klein 9B KV — this takes a moment...")
+                from stages.synthesize import KleinSynthesizer, select_klein_references
+
+                klein_refs = select_klein_references(view_images)
+                klein_model_path = mm.get_model_path("flux2_klein_kv")
+
+                synth = KleinSynthesizer(
+                    model_path=klein_model_path,
+                    hf_token=params["hf_token"],
+                )
+                synth.load_model()
+                stage_msg(2, f"Synthesizing {num_images} training images with Klein 9B KV (4 steps)...")
+
+                synth.synthesize_dataset(
+                    reference_images=klein_refs,
+                    output_dir=dataset_dir,
+                    num_images=num_images,
+                    start_from=0,
+                    progress_callback=synthesis_progress,
+                    num_inference_steps=params["inference_steps"],
+                    preview_callback=synthesis_preview,
+                )
+                synth.unload_model()
+                del synth
+            else:
+                # --- Flux 2 DEV: up to 10 reference images, 50 steps ---
+                stage_msg(2, "Loading Flux 2 DEV — this takes a moment...")
+                from stages.synthesize import DatasetSynthesizer
+
+                synth = DatasetSynthesizer(
+                    hf_token=params["hf_token"],
+                )
+                synth.load_model()
+                stage_msg(2, f"Synthesizing {num_images} training images with Flux 2 DEV...")
+
+                synth.synthesize_dataset(
+                    reference_images=view_images,
+                    output_dir=dataset_dir,
+                    num_images=num_images,
+                    start_from=0,
+                    progress_callback=synthesis_progress,
+                    num_inference_steps=params["inference_steps"],
+                    preview_callback=synthesis_preview,
+                )
+                synth.unload_model()
+                del synth
+
             for img in view_images:
                 img.close()
             gc.collect()

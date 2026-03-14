@@ -1,11 +1,14 @@
 """
-synthesize.py — Flux 2 DEV dataset synthesizer.
+synthesize.py — Dataset synthesizers for Chimera.
 
-Uses Flux2Pipeline from diffusers to generate training images from
-reference images.  Designed for RunPod RTX PRO 6000 (96 GB VRAM).
+Supports two synthesizers:
+  - Flux 2 DEV (32B, up to 10 reference images, 50 steps)
+  - FLUX.2 Klein 9B KV (9B, up to 4 reference images, 4 steps, KV-cache)
 
-The pipeline is loaded via ``from_pretrained`` from a local diffusers-format
-directory and uses ``enable_model_cpu_offload()`` to manage VRAM.
+The user selects the synthesizer at upload time.  Models are downloaded
+on demand by the ModelManager.
+
+Designed for RunPod RTX PRO 6000 (96 GB VRAM).
 """
 
 from __future__ import annotations
@@ -41,6 +44,12 @@ except ImportError as _flux2_import_error:  # noqa: F841
     )
 else:
     _FLUX2_UNAVAILABLE_MSG = ""
+
+# Klein KV pipeline — requires diffusers from GitHub main branch
+try:
+    from diffusers import Flux2KleinKVPipeline
+except ImportError:
+    Flux2KleinKVPipeline = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +98,27 @@ def _latents_to_preview(latents: torch.Tensor, size: int = 256) -> Image.Image:
 
 
 # ---------------------------------------------------------------------------
-# DatasetSynthesizer
+# Reference image selection for Klein (4 images max)
+# ---------------------------------------------------------------------------
+
+# Klein supports max 4 reference images.  From the 5 Gemini views
+# (left, front, right, face, back), we pick the 4 most informative:
+#   Image 1: Front face        (view index 1)
+#   Image 2: Face close-up     (view index 3)
+#   Image 3: Left fullbody     (view index 0)
+#   Image 4: Right fullbody    (view index 2)
+KLEIN_VIEW_INDICES = [1, 3, 0, 2]  # front, face, left, right
+
+
+def select_klein_references(all_views: list[Image.Image]) -> list[Image.Image]:
+    """Select 4 reference images for Klein from the full set of views."""
+    if len(all_views) <= 4:
+        return list(all_views)
+    return [all_views[i] for i in KLEIN_VIEW_INDICES if i < len(all_views)]
+
+
+# ---------------------------------------------------------------------------
+# DatasetSynthesizer — Flux 2 DEV
 # ---------------------------------------------------------------------------
 
 
@@ -362,4 +391,236 @@ class DatasetSynthesizer:
                 progress_callback(i + 1, num_images)
 
         logger.info("[DatasetSynthesizer] Done — %d image(s) saved.", len(saved_paths))
+        return saved_paths
+
+
+# ---------------------------------------------------------------------------
+# KleinSynthesizer — FLUX.2 Klein 9B KV
+# ---------------------------------------------------------------------------
+
+
+class KleinSynthesizer:
+    """Generate a character training dataset using FLUX.2 Klein 9B KV.
+
+    Klein 9B is step-distilled to 4 denoising steps.  The KV variant caches
+    reference image key/value projections after step 0 and reuses them for
+    steps 1-3, yielding ~2.5x speed improvement for multi-reference generation.
+
+    Max 4 reference images.  ~29 GB VRAM.
+
+    Parameters
+    ----------
+    model_path:
+        Path to the downloaded Klein 9B KV model directory, OR the HuggingFace
+        repo ID to load via ``from_pretrained``.
+    hf_token:
+        HuggingFace access token (model is gated).
+    device:
+        Torch device string.  Defaults to ``"cuda"``.
+    """
+
+    REPO_ID: str = "black-forest-labs/FLUX.2-klein-9b-kv"
+    MAX_REFS: int = 4
+    DEFAULT_STEPS: int = 4
+
+    def __init__(
+        self,
+        model_path: Optional[str] = None,
+        hf_token: Optional[str] = None,
+        device: str = "cuda",
+    ) -> None:
+        self.model_path = model_path or self.REPO_ID
+        self.hf_token = hf_token
+        self.device = device
+        self.pipe = None
+
+    # ------------------------------------------------------------------
+    # Model lifecycle
+    # ------------------------------------------------------------------
+
+    def load_model(self) -> None:
+        """Load the Klein 9B KV pipeline."""
+        if Flux2KleinKVPipeline is None:
+            raise RuntimeError(
+                "[KleinSynthesizer] Flux2KleinKVPipeline is not available. "
+                "Install diffusers from GitHub main branch:\n"
+                "    pip install -U git+https://github.com/huggingface/diffusers.git\n"
+            )
+
+        if self.pipe is not None:
+            logger.debug("[KleinSynthesizer] Pipeline already loaded — skipping.")
+            return
+
+        logger.info("[KleinSynthesizer] Loading Klein 9B KV pipeline from %s ...", self.model_path)
+
+        self.pipe = Flux2KleinKVPipeline.from_pretrained(
+            self.model_path,
+            torch_dtype=torch.bfloat16,
+            token=self.hf_token,
+        )
+        self.pipe.enable_model_cpu_offload()
+
+        logger.info("[KleinSynthesizer] Pipeline ready (cpu offload enabled).")
+
+    def unload_model(self) -> None:
+        """Delete the pipeline and release all VRAM."""
+        if self.pipe is not None:
+            logger.info("[KleinSynthesizer] Unloading Klein 9B KV pipeline...")
+            del self.pipe
+            self.pipe = None
+
+        torch.cuda.empty_cache()
+        gc.collect()
+        logger.info("[KleinSynthesizer] VRAM released.")
+
+    # ------------------------------------------------------------------
+    # Single-image generation
+    # ------------------------------------------------------------------
+
+    def generate_image(
+        self,
+        prompt: str,
+        reference_images: list[Image.Image],
+        width: int = 1024,
+        height: int = 1024,
+        guidance_scale: float = 5.0,
+        num_inference_steps: int = 4,
+        seed: Optional[int] = None,
+        preview_callback: Optional[Callable[[int, int, Image.Image], None]] = None,
+        preview_every: int = 1,
+    ) -> Image.Image:
+        """Generate a single image using Klein 9B KV with reference images.
+
+        Klein supports max 4 reference images and is step-distilled to 4 steps.
+        The KV-cache variant caches ref image projections after step 0.
+        """
+        if self.pipe is None:
+            raise RuntimeError(
+                "[KleinSynthesizer] Pipeline is not loaded. "
+                "Call load_model() before generate_image()."
+            )
+
+        if not reference_images:
+            raise ValueError("[KleinSynthesizer] reference_images must not be empty.")
+
+        if len(reference_images) > self.MAX_REFS:
+            raise ValueError(
+                f"[KleinSynthesizer] Klein 9B KV supports at most {self.MAX_REFS} "
+                f"reference images; got {len(reference_images)}."
+            )
+
+        generator: Optional[torch.Generator] = None
+        if seed is not None:
+            generator = torch.Generator(device="cpu").manual_seed(seed)
+
+        # Build step callback for latent previews
+        step_callback = None
+        if preview_callback is not None:
+            def step_callback(pipe, step_index, timestep, callback_kwargs):
+                if (step_index + 1) % preview_every == 0:
+                    try:
+                        latents = callback_kwargs.get("latents")
+                        if latents is not None:
+                            preview = _latents_to_preview(latents)
+                            preview_callback(step_index + 1, num_inference_steps, preview)
+                    except Exception:
+                        pass
+                return callback_kwargs
+
+        pipe_kwargs: dict = dict(
+            prompt=prompt,
+            image=reference_images,
+            width=width,
+            height=height,
+            guidance_scale=guidance_scale,
+            num_inference_steps=num_inference_steps,
+            generator=generator,
+        )
+
+        if step_callback is not None:
+            pipe_kwargs["callback_on_step_end"] = step_callback
+            pipe_kwargs["callback_on_step_end_tensor_inputs"] = ["latents"]
+
+        result = self.pipe(**pipe_kwargs).images[0]
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Full dataset synthesis
+    # ------------------------------------------------------------------
+
+    def synthesize_dataset(
+        self,
+        reference_images: list[Image.Image],
+        output_dir: str,
+        num_images: int = 25,
+        start_from: int = 0,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
+        num_inference_steps: int = 4,
+        preview_callback: Optional[Callable[[int, int, int, Image.Image], None]] = None,
+    ) -> list[str]:
+        """Generate a full training dataset using Klein 9B KV.
+
+        Same interface as DatasetSynthesizer.synthesize_dataset() but uses
+        Klein-specific prompt templates (4 reference images instead of 5).
+        """
+        if self.pipe is None:
+            raise RuntimeError(
+                "[KleinSynthesizer] Pipeline is not loaded. "
+                "Call load_model() before synthesize_dataset()."
+            )
+
+        if start_from < 0 or start_from >= num_images:
+            raise ValueError(
+                f"[KleinSynthesizer] start_from={start_from} is out of range "
+                f"for num_images={num_images}."
+            )
+
+        from utils.prompt_templates import get_prompt_templates_klein
+
+        templates = get_prompt_templates_klein(num_images)
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        saved_paths: list[str] = []
+        remaining = num_images - start_from
+
+        logger.info(
+            "[KleinSynthesizer] Synthesizing %d image(s) (indices %d-%d) into %s ...",
+            remaining,
+            start_from,
+            num_images - 1,
+            output_dir,
+        )
+
+        for i in range(start_from, num_images):
+            prompt = templates[i]
+            seed = 42 + i
+
+            logger.debug("[KleinSynthesizer] Generating image %d/%d — seed=%d", i + 1, num_images, seed)
+
+            img_preview_cb = None
+            if preview_callback is not None:
+                def img_preview_cb(step, total, preview, _idx=i):
+                    preview_callback(_idx, step, total, preview)
+
+            image = self.generate_image(
+                prompt=prompt,
+                reference_images=reference_images,
+                seed=seed,
+                num_inference_steps=num_inference_steps,
+                preview_callback=img_preview_cb,
+            )
+
+            filename = f"img_{i + 1:03d}.png"
+            filepath = output_path / filename
+            image.save(filepath)
+            saved_paths.append(str(filepath))
+
+            logger.debug("[KleinSynthesizer] Saved %s", filepath)
+
+            if progress_callback is not None:
+                progress_callback(i + 1, num_images)
+
+        logger.info("[KleinSynthesizer] Done — %d image(s) saved.", len(saved_paths))
         return saved_paths

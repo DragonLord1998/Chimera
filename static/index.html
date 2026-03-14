@@ -99,6 +99,14 @@
           <span class="setting-hint">Contains images + captions from a previous run. Skips Flux 2 synthesis and captioning.</span>
         </div>
         <div class="setting-group">
+          <label class="setting-label" for="synthesizer">Synthesizer</label>
+          <select class="setting-input" id="synthesizer">
+            <option value="flux2_dev" selected>Flux 2 DEV (32B, 50 steps)</option>
+            <option value="klein_kv">FLUX.2 Klein 9B KV (9B, 4 steps)</option>
+          </select>
+          <span class="setting-hint">Klein: 2.5x faster, 4 ref images | DEV: higher quality, 5 ref images</span>
+        </div>
+        <div class="setting-group">
           <label class="setting-label" for="numImages">Training Images</label>
           <input class="setting-input" type="number" id="numImages" value="25" min="10" max="50">
           <span class="setting-hint">10 – 50 recommended</span>
@@ -133,7 +141,7 @@
         </div>
         <div class="setting-group full-width">
           <label class="setting-label" for="samplePrompts">Sample Prompts <span class="optional">(optional)</span></label>
-          <textarea class="setting-input setting-textarea" id="samplePrompts" rows="4" placeholder="a portrait of TRIGGER, looking at the camera, studio lighting&#10;TRIGGER walking in a park, natural lighting, full body shot" spellcheck="false"></textarea>
+          <textarea class="setting-input setting-textarea" id="samplePrompts" rows="5" placeholder="a portrait of TRIGGER, looking at the camera, studio lighting&#10;TRIGGER walking in a park, natural lighting, full body shot" spellcheck="false" style="white-space: pre; overflow-x: auto;"></textarea>
           <span class="setting-hint">One prompt per line. TRIGGER is replaced with your trigger word. Leave empty for defaults.</span>
         </div>
       </div>
@@ -212,7 +220,7 @@
       <div class="section-label">
         <span class="step-num">04</span>
         <span>Synthetic Training Images</span>
-        <span class="section-tag">Flux 2</span>
+        <span class="section-tag" id="synthesizerTag">Flux 2</span>
         <span class="section-count" id="syntheticCount">0 / 25</span>
         <a id="downloadDatasetBtn" class="section-action" href="#" hidden>Download Dataset ZIP</a>
       </div>

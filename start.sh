@@ -12,7 +12,8 @@ python3 fix_transformers.py
 
 echo "[Chimera] Installing/upgrading dependencies..."
 pip install -q --break-system-packages flask pillow google-genai sentencepiece 2>/dev/null || true
-pip install -q --break-system-packages -U "transformers>=5.0" "diffusers>=0.32.0" 2>/dev/null || true
+pip install -q --break-system-packages -U "transformers>=5.0" 2>/dev/null || true
+pip install -q --break-system-packages -U git+https://github.com/huggingface/diffusers.git 2>/dev/null || true
 
 # Clone AI Toolkit if not present
 if [ ! -d "ai-toolkit" ]; then
@@ -29,7 +30,9 @@ if [ ! -d "SeedVR2-CLI" ]; then
 fi
 
 # Re-upgrade in case ai-toolkit downgraded
-pip install -q --break-system-packages -U "transformers>=5.0" "diffusers>=0.32.0" "huggingface-hub>=1.0" 2>/dev/null || true
+# Install diffusers from GitHub main branch — required for Flux2KleinKVPipeline
+pip install -q --break-system-packages -U "transformers>=5.0" "huggingface-hub>=1.0" 2>/dev/null || true
+pip install -q --break-system-packages -U git+https://github.com/huggingface/diffusers.git 2>/dev/null || true
 
 echo "[Chimera] Starting server on port ${PORT:-7860}..."
 exec python3 server.py
