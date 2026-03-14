@@ -96,11 +96,15 @@ def start_pipeline():
     views_zip = request.files.get("views_zip")
     has_views_zip = views_zip is not None and views_zip.filename
 
-    if not has_image and not has_views_zip:
-        return jsonify({"error": "Upload a character image or a views zip file"}), 400
+    # Dataset zip is optional — if provided, skip synthesis + captioning
+    dataset_zip = request.files.get("dataset_zip")
+    has_dataset_zip = dataset_zip is not None and dataset_zip.filename
 
-    if not has_views_zip and not params["gemini_key"]:
-        return jsonify({"error": "Gemini API key is required (or upload a views zip)"}), 400
+    if not has_image and not has_views_zip and not has_dataset_zip:
+        return jsonify({"error": "Upload a character image, views zip, or dataset zip"}), 400
+
+    if not has_views_zip and not has_dataset_zip and not params["gemini_key"]:
+        return jsonify({"error": "Gemini API key is required (or upload a views/dataset zip)"}), 400
 
     # Create job
     job_id = str(uuid.uuid4())[:12]
@@ -120,6 +124,12 @@ def start_pipeline():
         views_zip_path = os.path.join(job_dir, "views.zip")
         views_zip.save(views_zip_path)
 
+    # Save dataset zip if provided
+    dataset_zip_path = None
+    if has_dataset_zip:
+        dataset_zip_path = os.path.join(job_dir, "dataset.zip")
+        dataset_zip.save(dataset_zip_path)
+
     # Register job with event history and subscriber list
     with _jobs_lock:
         _jobs[job_id] = {
@@ -137,7 +147,7 @@ def start_pipeline():
     # Launch pipeline in background thread
     thread = threading.Thread(
         target=_run_pipeline,
-        args=(job_id, image_path, job_dir, params, views_zip_path),
+        args=(job_id, image_path, job_dir, params, views_zip_path, dataset_zip_path),
         daemon=True,
         name=f"pipeline-{job_id}",
     )
@@ -283,6 +293,38 @@ def download_views(job_id: str):
 
 
 # ---------------------------------------------------------------------------
+# API: download dataset as zip
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/download-dataset/<job_id>")
+def download_dataset(job_id: str):
+    import zipfile
+    import io
+
+    dataset_dir = os.path.join(JOBS_DIR, job_id, "dataset")
+    if not os.path.isdir(dataset_dir):
+        return jsonify({"error": "No dataset found for this job"}), 404
+
+    files = [f for f in os.listdir(dataset_dir)
+             if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".txt"))]
+    if not files:
+        return jsonify({"error": "No dataset files found"}), 404
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for fname in sorted(files):
+            zf.write(os.path.join(dataset_dir, fname), fname)
+    buf.seek(0)
+
+    return Response(
+        buf.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=chimera_dataset_{job_id}.zip"},
+    )
+
+
+# ---------------------------------------------------------------------------
 # Pipeline background thread
 # ---------------------------------------------------------------------------
 
@@ -293,6 +335,7 @@ def _run_pipeline(
     job_dir: str,
     params: dict,
     views_zip_path: str | None = None,
+    dataset_zip_path: str | None = None,
 ) -> None:
     """Full pipeline: model check → multi-view → synthesize → caption → train."""
 
@@ -340,129 +383,152 @@ def _run_pipeline(
             mm.ensure_all_models()
 
         # ------------------------------------------------------------------
-        # Stage 1 — Multi-view generation (Gemini) or extract from zip
+        # Fast path: dataset ZIP provided — skip stages 1, 2, 2b
         # ------------------------------------------------------------------
-        view_paths: list[str] = []
-        view_images: list = []
-        view_names = ["left", "front", "right", "face", "back"]
-
-        if views_zip_path and os.path.isfile(views_zip_path):
+        if dataset_zip_path and os.path.isfile(dataset_zip_path):
             import zipfile
-            stage_msg(1, "Extracting uploaded multi-view images...")
-            with zipfile.ZipFile(views_zip_path, "r") as zf:
-                zf.extractall(stage1_dir)
+            stage_msg(2, "Extracting uploaded dataset...")
+            with zipfile.ZipFile(dataset_zip_path, "r") as zf:
+                zf.extractall(dataset_dir)
 
-            # Find view images — accept left/front/right.png or any 3 images
-            for vn in view_names:
-                candidate = os.path.join(stage1_dir, f"{vn}.png")
-                if not os.path.isfile(candidate):
-                    # Try to find any image file and rename
-                    candidate = None
-                if candidate and os.path.isfile(candidate):
-                    view_paths.append(candidate)
-                    view_images.append(Image.open(candidate).convert("RGB"))
-                    emit("view", {
-                        "position": vn,
-                        "url": f"/api/images/{job_id}/stage1/{vn}.png",
-                    })
-
-            # If exact names not found, grab any images from the zip
-            if len(view_paths) < 3:
-                view_paths = []
-                view_images = []
-                all_imgs = sorted([
-                    f for f in os.listdir(stage1_dir)
-                    if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
-                ])
-                for i, fname in enumerate(all_imgs[:5]):
-                    vn = view_names[i] if i < len(view_names) else f"view{i}"
-                    src = os.path.join(stage1_dir, fname)
-                    dst = os.path.join(stage1_dir, f"{vn}.png")
-                    img = Image.open(src).convert("RGB")
-                    img.save(dst, format="PNG")
-                    view_paths.append(dst)
-                    view_images.append(img)
-                    emit("view", {
-                        "position": vn,
-                        "url": f"/api/images/{job_id}/stage1/{vn}.png",
-                    })
-
-            if len(view_paths) < 3:
-                raise RuntimeError(
-                    f"Views zip must contain at least 3 images, found {len(view_paths)}"
-                )
-            stage_msg(1, "Multi-view images loaded from zip.")
+            # Count extracted images for UI
+            dataset_imgs = sorted([
+                f for f in os.listdir(dataset_dir)
+                if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+            ])
+            for i, fname in enumerate(dataset_imgs):
+                emit("synthetic", {
+                    "index": i,
+                    "url": f"/api/images/{job_id}/dataset/{fname}",
+                })
+            stage_msg(2, f"Dataset loaded from zip — {len(dataset_imgs)} images.")
 
         else:
-            stage_msg(1, "Generating multi-view character images with Gemini...")
-            from stages.multiview import MultiViewGenerator
+            # Full pipeline: multi-view → synthesis → captioning
 
-            pil_input = Image.open(image_path).convert("RGB")
-            mv = MultiViewGenerator(api_key=params["gemini_key"])
+            # ------------------------------------------------------------------
+            # Stage 1 — Multi-view generation (Gemini) or extract from zip
+            # ------------------------------------------------------------------
+            view_paths: list[str] = []
+            view_images: list = []
+            view_names = ["left", "front", "right", "face", "back"]
 
-            resized = MultiViewGenerator._resize(pil_input)
+            if views_zip_path and os.path.isfile(views_zip_path):
+                import zipfile
+                stage_msg(1, "Extracting uploaded multi-view images...")
+                with zipfile.ZipFile(views_zip_path, "r") as zf:
+                    zf.extractall(stage1_dir)
 
-            for view_name, prompt in MultiViewGenerator.VIEWS.items():
-                stage_msg(1, f"Generating {view_name} view...")
-                generated = mv._generate_view_with_retry(resized, prompt, view_name)
-                path = os.path.join(stage1_dir, f"{view_name}.png")
-                generated.save(path, format="PNG")
-                view_paths.append(path)
-                view_images.append(generated)
-                emit("view", {
-                    "position": view_name,
-                    "url": f"/api/images/{job_id}/stage1/{view_name}.png",
+                # Find view images — accept left/front/right.png or any 3 images
+                for vn in view_names:
+                    candidate = os.path.join(stage1_dir, f"{vn}.png")
+                    if not os.path.isfile(candidate):
+                        candidate = None
+                    if candidate and os.path.isfile(candidate):
+                        view_paths.append(candidate)
+                        view_images.append(Image.open(candidate).convert("RGB"))
+                        emit("view", {
+                            "position": vn,
+                            "url": f"/api/images/{job_id}/stage1/{vn}.png",
+                        })
+
+                # If exact names not found, grab any images from the zip
+                if len(view_paths) < 3:
+                    view_paths = []
+                    view_images = []
+                    all_imgs = sorted([
+                        f for f in os.listdir(stage1_dir)
+                        if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+                    ])
+                    for i, fname in enumerate(all_imgs[:5]):
+                        vn = view_names[i] if i < len(view_names) else f"view{i}"
+                        src = os.path.join(stage1_dir, fname)
+                        dst = os.path.join(stage1_dir, f"{vn}.png")
+                        img = Image.open(src).convert("RGB")
+                        img.save(dst, format="PNG")
+                        view_paths.append(dst)
+                        view_images.append(img)
+                        emit("view", {
+                            "position": vn,
+                            "url": f"/api/images/{job_id}/stage1/{vn}.png",
+                        })
+
+                if len(view_paths) < 3:
+                    raise RuntimeError(
+                        f"Views zip must contain at least 3 images, found {len(view_paths)}"
+                    )
+                stage_msg(1, "Multi-view images loaded from zip.")
+
+            else:
+                stage_msg(1, "Generating multi-view character images with Gemini...")
+                from stages.multiview import MultiViewGenerator
+
+                pil_input = Image.open(image_path).convert("RGB")
+                mv = MultiViewGenerator(api_key=params["gemini_key"])
+
+                resized = MultiViewGenerator._resize(pil_input)
+
+                for view_name, prompt in MultiViewGenerator.VIEWS.items():
+                    stage_msg(1, f"Generating {view_name} view...")
+                    generated = mv._generate_view_with_retry(resized, prompt, view_name)
+                    path = os.path.join(stage1_dir, f"{view_name}.png")
+                    generated.save(path, format="PNG")
+                    view_paths.append(path)
+                    view_images.append(generated)
+                    emit("view", {
+                        "position": view_name,
+                        "url": f"/api/images/{job_id}/stage1/{view_name}.png",
+                    })
+
+                pil_input.close()
+
+            # ------------------------------------------------------------------
+            # Stage 2 — Dataset synthesis (Flux 2)
+            # ------------------------------------------------------------------
+            stage_msg(2, "Loading Flux 2 DEV — this takes a moment...")
+            from stages.synthesize import DatasetSynthesizer
+
+            synth = DatasetSynthesizer(
+                hf_token=params["hf_token"],
+            )
+            synth.load_model()
+            stage_msg(2, f"Synthesizing {params['num_images']} training images...")
+
+            num_images = params["num_images"]
+
+            def synthesis_progress(current: int, total: int) -> None:
+                filename = f"img_{current:03d}.png"
+                emit("synthetic", {
+                    "index": current - 1,
+                    "url": f"/api/images/{job_id}/dataset/{filename}",
                 })
 
-            pil_input.close()
+            synth.synthesize_dataset(
+                reference_images=view_images,
+                output_dir=dataset_dir,
+                num_images=num_images,
+                start_from=0,
+                progress_callback=synthesis_progress,
+                num_inference_steps=params["inference_steps"],
+            )
+            synth.unload_model()
+            del synth
+            for img in view_images:
+                img.close()
+            gc.collect()
 
-        # ------------------------------------------------------------------
-        # Stage 2 — Dataset synthesis (Flux 2)
-        # ------------------------------------------------------------------
-        stage_msg(2, "Loading Flux 2 DEV — this takes a moment...")
-        from stages.synthesize import DatasetSynthesizer
+            # ------------------------------------------------------------------
+            # Stage 2b — Captioning (Florence 2)
+            # ------------------------------------------------------------------
+            stage_msg(2, "Captioning dataset with Florence 2...")
+            from stages.caption import CaptionGenerator
 
-        synth = DatasetSynthesizer(
-            hf_token=params["hf_token"],
-        )
-        synth.load_model()
-        stage_msg(2, f"Synthesizing {params['num_images']} training images...")
-
-        num_images = params["num_images"]
-
-        def synthesis_progress(current: int, total: int) -> None:
-            filename = f"img_{current:03d}.png"
-            emit("synthetic", {
-                "index": current - 1,
-                "url": f"/api/images/{job_id}/dataset/{filename}",
-            })
-
-        synth.synthesize_dataset(
-            reference_images=view_images,
-            output_dir=dataset_dir,
-            num_images=num_images,
-            start_from=0,
-            progress_callback=synthesis_progress,
-            num_inference_steps=params["inference_steps"],
-        )
-        synth.unload_model()
-        del synth
-        for img in view_images:
-            img.close()
-        gc.collect()
-
-        # ------------------------------------------------------------------
-        # Stage 2b — Captioning (Florence 2)
-        # ------------------------------------------------------------------
-        stage_msg(2, "Captioning dataset with Florence 2...")
-        from stages.caption import CaptionGenerator
-
-        cap = CaptionGenerator(model_path=mm.get_model_path("florence2"))
-        cap.load_model()
-        cap.caption_dataset(dataset_dir, trigger)
-        cap.unload_model()
-        del cap
-        gc.collect()
+            cap = CaptionGenerator(model_path=mm.get_model_path("florence2"))
+            cap.load_model()
+            cap.caption_dataset(dataset_dir, trigger)
+            cap.unload_model()
+            del cap
+            gc.collect()
 
         # ------------------------------------------------------------------
         # Stage 3 — LoRA training (AI Toolkit / Z-Image)

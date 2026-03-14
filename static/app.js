@@ -149,7 +149,7 @@ function onViewEvent(data, jobId) {
   }
 }
 
-function onSyntheticEvent(data) {
+function onSyntheticEvent(data, jobId) {
   const cell = document.querySelector(`.synthetic-cell[data-index="${data.index}"]`);
   if (!cell) return;
 
@@ -166,6 +166,13 @@ function onSyntheticEvent(data) {
   const loaded = document.querySelectorAll(".synthetic-cell.loaded").length;
   const total = document.querySelectorAll(".synthetic-cell").length;
   document.getElementById("syntheticCount").textContent = `${loaded} / ${total}`;
+
+  // Show download button once all synthetic images are generated
+  if (loaded >= total && jobId) {
+    const dlBtn = document.getElementById("downloadDatasetBtn");
+    dlBtn.href = `/api/download-dataset/${jobId}`;
+    dlBtn.hidden = false;
+  }
 
   activateSection("sectionSynthetic");
 }
@@ -230,7 +237,7 @@ function connectToJob(jobId, startBtn) {
   });
 
   evtSource.addEventListener("synthetic", e => {
-    onSyntheticEvent(JSON.parse(e.data));
+    onSyntheticEvent(JSON.parse(e.data), jobId);
   });
 
   evtSource.addEventListener("progress", e => {
@@ -286,6 +293,7 @@ function connectToJob(jobId, startBtn) {
 
 let uploadedFile = null;
 let viewsZipFile = null;
+let datasetZipFile = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   const uploadArea   = document.getElementById("uploadArea");
@@ -295,6 +303,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const viewsZipInput = document.getElementById("viewsZipInput");
   const viewsZipName  = document.getElementById("viewsZipName");
   const viewsZipClear = document.getElementById("viewsZipClear");
+  const datasetZipInput = document.getElementById("datasetZipInput");
+  const datasetZipName  = document.getElementById("datasetZipName");
+  const datasetZipClear = document.getElementById("datasetZipClear");
 
   // Views zip upload — extract and preview images
   viewsZipInput.addEventListener("change", async e => {
@@ -361,6 +372,22 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("sectionViews").classList.remove("active");
   });
 
+  // Dataset zip upload
+  datasetZipInput.addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (!file || !file.name.endsWith(".zip")) return;
+    datasetZipFile = file;
+    datasetZipName.textContent = file.name;
+    datasetZipClear.hidden = false;
+  });
+
+  datasetZipClear.addEventListener("click", () => {
+    datasetZipFile = null;
+    datasetZipName.textContent = "";
+    datasetZipClear.hidden = true;
+    datasetZipInput.value = "";
+  });
+
   // Init grid with default 25 placeholders
   initSyntheticGrid(25);
 
@@ -406,14 +433,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------------------------------------------------------------------------
 
   startBtn.addEventListener("click", async () => {
-    if (!uploadedFile && !viewsZipFile) {
-      alert("Please upload a character image or a views zip file.");
+    if (!uploadedFile && !viewsZipFile && !datasetZipFile) {
+      alert("Please upload a character image, views zip, or dataset zip.");
       return;
     }
 
     const geminiKey = document.getElementById("geminiKey").value.trim();
-    if (!geminiKey && !viewsZipFile) {
-      alert("Please enter your Gemini API key, or upload a views zip to skip generation.");
+    if (!geminiKey && !viewsZipFile && !datasetZipFile) {
+      alert("Please enter your Gemini API key, or upload a views/dataset zip to skip generation.");
       document.getElementById("geminiKey").focus();
       return;
     }
@@ -435,11 +462,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // Reset checkpoint container
     document.getElementById("checkpointContainer").innerHTML = "";
 
-    // Hide output section and download views button
+    // Hide output section and download buttons
     document.getElementById("outputSection").hidden = true;
     const dlBtn = document.getElementById("downloadViewsBtn");
     dlBtn.hidden = true;
     dlBtn.href = "#";
+    const dlDatasetBtn = document.getElementById("downloadDatasetBtn");
+    dlDatasetBtn.hidden = true;
+    dlDatasetBtn.href = "#";
 
     // Deactivate pipeline sections
     ["sectionViews", "sectionSynthetic", "sectionTraining", "sectionCheckpoints"].forEach(id => {
@@ -469,6 +499,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (viewsZipFile) {
       formData.append("views_zip", viewsZipFile);
+    }
+    if (datasetZipFile) {
+      formData.append("dataset_zip", datasetZipFile);
     }
 
     let jobId;
