@@ -218,6 +218,93 @@ function onDiffusionPreview(data) {
   activateSection("sectionSynthetic");
 }
 
+function onUpscaledEvent(data) {
+  const cell = document.querySelector(`.synthetic-cell[data-index="${data.index}"]`);
+  if (!cell) return;
+
+  // Store both URLs on the cell for the comparison slider
+  cell.dataset.originalUrl = data.original_url;
+  cell.dataset.upscaledUrl = data.upscaled_url;
+  cell.classList.add("has-comparison");
+
+  // Update the displayed image to the upscaled version
+  const img = cell.querySelector("img:not(.diffusion-preview-img)");
+  if (img) img.src = data.upscaled_url + "?t=" + Date.now();
+
+  // Add compare badge
+  if (!cell.querySelector(".compare-badge")) {
+    const badge = document.createElement("div");
+    badge.className = "compare-badge";
+    badge.textContent = "2048px";
+    cell.appendChild(badge);
+  }
+}
+
+// Before/After comparison slider (opens on click)
+function openComparison(originalUrl, upscaledUrl) {
+  // Remove existing overlay
+  const existing = document.getElementById("comparisonOverlay");
+  if (existing) existing.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "comparisonOverlay";
+  overlay.className = "comparison-overlay";
+  overlay.innerHTML = `
+    <div class="comparison-container">
+      <div class="comparison-close">&times;</div>
+      <div class="comparison-labels">
+        <span class="comparison-label-left">Original 1024px</span>
+        <span class="comparison-label-right">SeedVR2 2048px</span>
+      </div>
+      <div class="comparison-wrapper">
+        <img class="comparison-img comparison-img-upscaled" src="${upscaledUrl}" alt="upscaled" />
+        <div class="comparison-clip">
+          <img class="comparison-img comparison-img-original" src="${originalUrl}" alt="original" />
+        </div>
+        <div class="comparison-slider">
+          <div class="comparison-handle"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const wrapper = overlay.querySelector(".comparison-wrapper");
+  const clip = overlay.querySelector(".comparison-clip");
+  const slider = overlay.querySelector(".comparison-slider");
+
+  function updateSlider(x) {
+    const rect = wrapper.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(100, ((x - rect.left) / rect.width) * 100));
+    clip.style.width = pct + "%";
+    slider.style.left = pct + "%";
+  }
+
+  // Start at 50%
+  setTimeout(() => {
+    const rect = wrapper.getBoundingClientRect();
+    updateSlider(rect.left + rect.width * 0.5);
+  }, 50);
+
+  let dragging = false;
+  wrapper.addEventListener("mousedown", () => { dragging = true; });
+  window.addEventListener("mouseup", () => { dragging = false; });
+  wrapper.addEventListener("mousemove", e => { if (dragging) updateSlider(e.clientX); });
+  wrapper.addEventListener("click", e => updateSlider(e.clientX));
+
+  // Touch support
+  wrapper.addEventListener("touchstart", () => { dragging = true; });
+  wrapper.addEventListener("touchend", () => { dragging = false; });
+  wrapper.addEventListener("touchmove", e => {
+    if (dragging) updateSlider(e.touches[0].clientX);
+  });
+
+  // Close
+  overlay.querySelector(".comparison-close").addEventListener("click", () => overlay.remove());
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+}
+
 function onCompleteEvent(data, evtSource, startBtn) {
   setStatus("Complete!", "done");
 
@@ -272,6 +359,10 @@ function connectToJob(jobId, startBtn) {
     onDiffusionPreview(JSON.parse(e.data));
   });
 
+  evtSource.addEventListener("upscaled", e => {
+    onUpscaledEvent(JSON.parse(e.data));
+  });
+
   evtSource.addEventListener("progress", e => {
     onProgressEvent(JSON.parse(e.data));
   });
@@ -311,7 +402,7 @@ function connectToJob(jobId, startBtn) {
     }
   }, 30_000);
 
-  ["stage", "view", "synthetic", "diffusion_preview", "progress", "checkpoint", "complete", "heartbeat"].forEach(
+  ["stage", "view", "synthetic", "diffusion_preview", "upscaled", "progress", "checkpoint", "complete", "heartbeat"].forEach(
     name => evtSource.addEventListener(name, () => { lastActivity = Date.now(); })
   );
 
@@ -422,6 +513,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Init grid with default 25 placeholders
   initSyntheticGrid(25);
+
+  // Click handler for before/after comparison on synthetic cells
+  document.getElementById("syntheticGrid").addEventListener("click", e => {
+    const cell = e.target.closest(".synthetic-cell.has-comparison");
+    if (!cell) return;
+    openComparison(cell.dataset.originalUrl, cell.dataset.upscaledUrl);
+  });
 
   // Keep grid in sync with numImages setting
   document.getElementById("numImages").addEventListener("input", e => {

@@ -55,17 +55,20 @@ class ImageUpscaler:
         dataset_dir: str,
         target_resolution: int = 2048,
         progress_callback: Optional[Callable[[int, int], None]] = None,
+        image_callback: Optional[Callable[[int, str, str], None]] = None,
     ) -> None:
         """
-        Upscale all images in dataset_dir in-place using SeedVR2 7B.
+        Upscale all images in dataset_dir using SeedVR2 7B.
 
-        Each image is upscaled to target_resolution (short side) and the
-        original file is replaced with the upscaled version.
+        Originals are preserved in ``_originals/`` for before/after comparison.
+        The main files in dataset_dir are replaced with upscaled versions.
 
         Args:
             dataset_dir: Directory containing .png images.
             target_resolution: Target short-side resolution in pixels.
             progress_callback: Optional (current, total) callback.
+            image_callback: Optional (index, original_relpath, upscaled_relpath)
+                callback fired after each image is upscaled.
 
         Raises:
             UpscalerError: If the CLI fails or produces no output.
@@ -83,6 +86,11 @@ class ImageUpscaler:
             return
 
         total = len(image_files)
+
+        # Preserve originals for before/after comparison
+        originals_dir = os.path.join(dataset_dir, "_originals")
+        os.makedirs(originals_dir, exist_ok=True)
+
         output_dir = os.path.join(dataset_dir, "_upscaled")
         os.makedirs(output_dir, exist_ok=True)
 
@@ -91,13 +99,19 @@ class ImageUpscaler:
         for i, filename in enumerate(image_files):
             input_path = os.path.join(dataset_dir, filename)
 
+            # Save original copy
+            original_copy = os.path.join(originals_dir, filename)
+            shutil.copy2(input_path, original_copy)
+
+            output_path = os.path.join(output_dir, filename)
             cmd = [
                 self.python_bin,
                 self.cli_script,
                 input_path,
                 "--resolution", str(target_resolution),
-                "--output_dir", output_dir,
+                "--output", output_path,
                 "--dit_model", "seedvr2_ema_7b_fp16.safetensors",
+                "--batch_size", "1",
             ]
 
             print(f"[Chimera] Upscaler: [{i + 1}/{total}] {filename}...")
@@ -117,16 +131,21 @@ class ImageUpscaler:
                 print(f"[Chimera] Upscaler: WARNING — timeout on {filename}, skipping.")
                 continue
 
-            # Find the upscaled output file
-            upscaled = self._find_output(output_dir, filename)
-            if upscaled:
-                # Replace original with upscaled version
-                shutil.move(upscaled, input_path)
+            # Replace main file with upscaled version
+            if os.path.isfile(output_path):
+                shutil.move(output_path, input_path)
             else:
-                print(f"[Chimera] Upscaler: WARNING — no output for {filename}")
+                upscaled = self._find_output(output_dir, filename)
+                if upscaled:
+                    shutil.move(upscaled, input_path)
+                else:
+                    print(f"[Chimera] Upscaler: WARNING — no output for {filename}")
 
             if progress_callback:
                 progress_callback(i + 1, total)
+
+            if image_callback:
+                image_callback(i, f"_originals/{filename}", filename)
 
         # Clean up temp directory
         shutil.rmtree(output_dir, ignore_errors=True)

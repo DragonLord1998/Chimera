@@ -740,6 +740,150 @@ body {
 /* Hide preview once the final image loads */
 .synthetic-cell.loaded .diffusion-preview { display: none; }
 
+/* Upscale comparison badge */
+.compare-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 3px;
+  z-index: 3;
+  letter-spacing: 0.03em;
+}
+
+.synthetic-cell.has-comparison { cursor: pointer; }
+.synthetic-cell.has-comparison:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---------------------------------------------------------
+   Before / After comparison overlay
+   --------------------------------------------------------- */
+.comparison-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade-in 0.2s ease;
+}
+
+.comparison-container {
+  position: relative;
+  width: min(90vw, 900px);
+  max-height: 90vh;
+}
+
+.comparison-close {
+  position: absolute;
+  top: -36px;
+  right: 0;
+  color: var(--text-sub);
+  font-size: 28px;
+  cursor: pointer;
+  z-index: 10;
+  line-height: 1;
+}
+.comparison-close:hover { color: var(--text); }
+
+.comparison-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-sub);
+}
+
+.comparison-wrapper {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  cursor: ew-resize;
+  user-select: none;
+}
+
+.comparison-img {
+  width: 100%;
+  display: block;
+}
+
+.comparison-clip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.comparison-clip .comparison-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  min-width: 0;
+}
+
+/* Make the clipped image match the full-width image */
+.comparison-clip .comparison-img-original {
+  width: var(--full-width, 100%);
+  max-width: none;
+}
+
+.comparison-slider {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 3px;
+  height: 100%;
+  background: var(--accent-bright);
+  transform: translateX(-50%);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.comparison-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+.comparison-handle::before,
+.comparison-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-top: 2px solid #fff;
+  border-right: 2px solid #fff;
+}
+.comparison-handle::before {
+  left: 4px;
+  transform: translateY(-50%) rotate(-135deg);
+}
+.comparison-handle::after {
+  right: 4px;
+  transform: translateY(-50%) rotate(45deg);
+}
+
 /* ---------------------------------------------------------
    Progress bar
    --------------------------------------------------------- */

@@ -681,11 +681,19 @@ def _run_pipeline(
                 def upscale_progress(current: int, total: int) -> None:
                     stage_msg(2, f"Upscaling image {current}/{total}...")
 
+                def upscale_image_done(index: int, orig_rel: str, upscaled_rel: str) -> None:
+                    emit("upscaled", {
+                        "index": index,
+                        "original_url": f"/api/images/{job_id}/dataset/{orig_rel}",
+                        "upscaled_url": f"/api/images/{job_id}/dataset/{upscaled_rel}",
+                    })
+
                 upscaler = ImageUpscaler(cli_dir=SEEDVR2_PATH)
                 upscaler.upscale_dataset(
                     dataset_dir=dataset_dir,
                     target_resolution=2048,
                     progress_callback=upscale_progress,
+                    image_callback=upscale_image_done,
                 )
                 del upscaler
                 gc.collect()
