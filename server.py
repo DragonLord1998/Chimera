@@ -502,7 +502,7 @@ def _run_pipeline(
             mm.ensure_all_models()
 
         # ------------------------------------------------------------------
-        # Fast path: dataset ZIP provided — skip stages 1, 2, 2b
+        # Fast path: dataset ZIP provided — skip stages 1 and 2
         # ------------------------------------------------------------------
         if dataset_zip_path and os.path.isfile(dataset_zip_path):
             import zipfile
@@ -521,6 +521,25 @@ def _run_pipeline(
                     "url": f"/api/images/{job_id}/dataset/{fname}",
                 })
             stage_msg(2, f"Dataset loaded from zip — {len(dataset_imgs)} images.")
+
+            # Check if captions exist — if not, run Florence 2
+            caption_files = [
+                f for f in os.listdir(dataset_dir)
+                if f.lower().endswith(".txt")
+            ]
+            if len(caption_files) < len(dataset_imgs):
+                stage_msg(2, f"No captions found — running Florence 2 on {len(dataset_imgs)} images...")
+                from stages.caption import CaptionGenerator
+
+                cap = CaptionGenerator(model_path=mm.get_model_path("florence2"))
+                cap.load_model()
+                cap.caption_dataset(dataset_dir, trigger)
+                cap.unload_model()
+                del cap
+                gc.collect()
+                stage_msg(2, "Captioning complete.")
+            else:
+                stage_msg(2, f"Found {len(caption_files)} existing captions — skipping Florence 2.")
 
         else:
             # Full pipeline: multi-view → synthesis → captioning
