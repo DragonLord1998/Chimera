@@ -511,6 +511,70 @@ body {
 /* ---------------------------------------------------------
    Multi-view cards
    --------------------------------------------------------- */
+.section-action {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--accent);
+  text-decoration: none;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 3px 10px;
+  transition: background var(--transition), color var(--transition);
+}
+
+.section-action:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.views-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.views-zip-label {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--transition);
+}
+
+.views-zip-label:hover {
+  border-color: var(--accent);
+  color: var(--text-sub);
+}
+
+.views-zip-name {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.views-zip-clear {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 2px 8px;
+  line-height: 1;
+}
+
+.views-zip-clear:hover {
+  border-color: #f44;
+  color: #f44;
+}
+
 .views-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

@@ -109,7 +109,7 @@ function onStageEvent(data) {
   console.log("[stage]", data);
 }
 
-function onViewEvent(data) {
+function onViewEvent(data, jobId) {
   const id = `view${capitalize(data.position)}`;
   const el = document.getElementById(id);
   if (!el) return;
@@ -123,6 +123,14 @@ function onViewEvent(data) {
   el.appendChild(img);
   el.classList.add("loaded");
   activateSection("sectionViews");
+
+  // Show download button once all 3 views are loaded
+  const loaded = document.querySelectorAll(".view-placeholder.loaded").length;
+  if (loaded >= 3 && jobId) {
+    const dlBtn = document.getElementById("downloadViewsBtn");
+    dlBtn.href = `/api/download-views/${jobId}`;
+    dlBtn.hidden = false;
+  }
 }
 
 function onSyntheticEvent(data) {
@@ -192,12 +200,33 @@ function onErrorEvent(data, evtSource, startBtn) {
 // ---------------------------------------------------------------------------
 
 let uploadedFile = null;
+let viewsZipFile = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   const uploadArea   = document.getElementById("uploadArea");
   const imageInput   = document.getElementById("imageInput");
   const startBtn     = document.getElementById("startBtn");
   const loraStepsEl  = document.getElementById("loraSteps");
+  const viewsZipInput = document.getElementById("viewsZipInput");
+  const viewsZipName  = document.getElementById("viewsZipName");
+  const viewsZipClear = document.getElementById("viewsZipClear");
+
+  // Views zip upload
+  viewsZipInput.addEventListener("change", e => {
+    const file = e.target.files[0];
+    if (file && file.name.endsWith(".zip")) {
+      viewsZipFile = file;
+      viewsZipName.textContent = file.name;
+      viewsZipClear.hidden = false;
+    }
+  });
+
+  viewsZipClear.addEventListener("click", () => {
+    viewsZipFile = null;
+    viewsZipName.textContent = "";
+    viewsZipClear.hidden = true;
+    viewsZipInput.value = "";
+  });
 
   // Init grid with default 25 placeholders
   initSyntheticGrid(25);
@@ -250,8 +279,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const geminiKey = document.getElementById("geminiKey").value.trim();
-    if (!geminiKey) {
-      alert("Please enter your Gemini API key.");
+    if (!geminiKey && !viewsZipFile) {
+      alert("Please enter your Gemini API key, or upload a views zip to skip generation.");
       document.getElementById("geminiKey").focus();
       return;
     }
@@ -285,8 +314,11 @@ document.addEventListener("DOMContentLoaded", () => {
     // Reset checkpoint container
     document.getElementById("checkpointContainer").innerHTML = "";
 
-    // Hide output section
+    // Hide output section and download views button
     document.getElementById("outputSection").hidden = true;
+    const dlBtn = document.getElementById("downloadViewsBtn");
+    dlBtn.hidden = true;
+    dlBtn.href = "#";
 
     // Deactivate pipeline sections
     ["sectionViews", "sectionSynthetic", "sectionTraining", "sectionCheckpoints"].forEach(id => {
@@ -309,6 +341,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const samplePromptsRaw = document.getElementById("samplePrompts").value.trim();
     if (samplePromptsRaw) {
       formData.append("sample_prompts", samplePromptsRaw);
+    }
+    if (viewsZipFile) {
+      formData.append("views_zip", viewsZipFile);
     }
 
     let jobId;
@@ -339,7 +374,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     evtSource.addEventListener("view", e => {
-      onViewEvent(JSON.parse(e.data));
+      onViewEvent(JSON.parse(e.data), jobId);
     });
 
     evtSource.addEventListener("synthetic", e => {

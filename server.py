@@ -88,8 +88,12 @@ def start_pipeline():
             l.replace("TRIGGER", params["trigger_word"]) for l in lines
         ]
 
-    if not params["gemini_key"]:
-        return jsonify({"error": "Gemini API key is required"}), 400
+    # Views zip is optional — if provided, skip Gemini generation
+    views_zip = request.files.get("views_zip")
+    has_views_zip = views_zip is not None and views_zip.filename
+
+    if not has_views_zip and not params["gemini_key"]:
+        return jsonify({"error": "Gemini API key is required (or upload a views zip)"}), 400
 
     # Create job
     job_id = str(uuid.uuid4())[:12]
@@ -100,6 +104,12 @@ def start_pipeline():
     ext = os.path.splitext(image_file.filename)[1] or ".png"
     image_path = os.path.join(job_dir, f"input{ext}")
     image_file.save(image_path)
+
+    # Save views zip if provided
+    views_zip_path = None
+    if has_views_zip:
+        views_zip_path = os.path.join(job_dir, "views.zip")
+        views_zip.save(views_zip_path)
 
     # Create event queue and register job
     event_queue: queue.Queue = queue.Queue()
@@ -113,7 +123,7 @@ def start_pipeline():
     # Launch pipeline in background thread
     thread = threading.Thread(
         target=_run_pipeline,
-        args=(job_id, event_queue, image_path, job_dir, params),
+        args=(job_id, event_queue, image_path, job_dir, params, views_zip_path),
         daemon=True,
         name=f"pipeline-{job_id}",
     )
@@ -192,6 +202,38 @@ def download_lora(job_id: str):
 
 
 # ---------------------------------------------------------------------------
+# API: download views as zip
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/download-views/<job_id>")
+def download_views(job_id: str):
+    import zipfile
+    import io
+
+    stage1_dir = os.path.join(JOBS_DIR, job_id, "stage1")
+    if not os.path.isdir(stage1_dir):
+        return jsonify({"error": "No views found for this job"}), 404
+
+    images = [f for f in os.listdir(stage1_dir)
+              if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))]
+    if not images:
+        return jsonify({"error": "No view images found"}), 404
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for fname in sorted(images):
+            zf.write(os.path.join(stage1_dir, fname), fname)
+    buf.seek(0)
+
+    return Response(
+        buf.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=chimera_views_{job_id}.zip"},
+    )
+
+
+# ---------------------------------------------------------------------------
 # Pipeline background thread
 # ---------------------------------------------------------------------------
 
@@ -202,6 +244,7 @@ def _run_pipeline(
     image_path: str,
     job_dir: str,
     params: dict,
+    views_zip_path: str | None = None,
 ) -> None:
     """Full pipeline: model check → multi-view → synthesize → caption → train."""
 
@@ -234,40 +277,81 @@ def _run_pipeline(
         mm.ensure_all_models()
 
         # ------------------------------------------------------------------
-        # Stage 1 — Multi-view generation (Gemini)
+        # Stage 1 — Multi-view generation (Gemini) or extract from zip
         # ------------------------------------------------------------------
-        stage_msg(1, "Generating multi-view character images with Gemini...")
-        from stages.multiview import MultiViewGenerator
-
-        pil_input = Image.open(image_path).convert("RGB")
-        mv = MultiViewGenerator(api_key=params["gemini_key"])
-
-        # Generate each view and emit event as soon as it lands
-        view_names = list(MultiViewGenerator.VIEWS.keys())  # left, front, right
         view_paths: list[str] = []
         view_images: list = []
+        view_names = ["left", "front", "right"]
 
-        import io
-        import time
-        from google import genai
-        from google.genai import types
+        if views_zip_path and os.path.isfile(views_zip_path):
+            import zipfile
+            stage_msg(1, "Extracting uploaded multi-view images...")
+            with zipfile.ZipFile(views_zip_path, "r") as zf:
+                zf.extractall(stage1_dir)
 
-        resized = MultiViewGenerator._resize(pil_input)
-        client = mv._client
+            # Find view images — accept left/front/right.png or any 3 images
+            for vn in view_names:
+                candidate = os.path.join(stage1_dir, f"{vn}.png")
+                if not os.path.isfile(candidate):
+                    # Try to find any image file and rename
+                    candidate = None
+                if candidate and os.path.isfile(candidate):
+                    view_paths.append(candidate)
+                    view_images.append(Image.open(candidate).convert("RGB"))
+                    emit("view", {
+                        "position": vn,
+                        "url": f"/api/images/{job_id}/stage1/{vn}.png",
+                    })
 
-        for view_name, prompt in MultiViewGenerator.VIEWS.items():
-            stage_msg(1, f"Generating {view_name} view...")
-            generated = mv._generate_view_with_retry(resized, prompt, view_name)
-            path = os.path.join(stage1_dir, f"{view_name}.png")
-            generated.save(path, format="PNG")
-            view_paths.append(path)
-            view_images.append(generated)
-            emit("view", {
-                "position": view_name,
-                "url": f"/api/images/{job_id}/stage1/{view_name}.png",
-            })
+            # If exact names not found, grab any images from the zip
+            if len(view_paths) < 3:
+                view_paths = []
+                view_images = []
+                all_imgs = sorted([
+                    f for f in os.listdir(stage1_dir)
+                    if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+                ])
+                for i, fname in enumerate(all_imgs[:3]):
+                    vn = view_names[i]
+                    src = os.path.join(stage1_dir, fname)
+                    dst = os.path.join(stage1_dir, f"{vn}.png")
+                    img = Image.open(src).convert("RGB")
+                    img.save(dst, format="PNG")
+                    view_paths.append(dst)
+                    view_images.append(img)
+                    emit("view", {
+                        "position": vn,
+                        "url": f"/api/images/{job_id}/stage1/{vn}.png",
+                    })
 
-        pil_input.close()
+            if len(view_paths) < 3:
+                raise RuntimeError(
+                    f"Views zip must contain at least 3 images, found {len(view_paths)}"
+                )
+            stage_msg(1, "Multi-view images loaded from zip.")
+
+        else:
+            stage_msg(1, "Generating multi-view character images with Gemini...")
+            from stages.multiview import MultiViewGenerator
+
+            pil_input = Image.open(image_path).convert("RGB")
+            mv = MultiViewGenerator(api_key=params["gemini_key"])
+
+            resized = MultiViewGenerator._resize(pil_input)
+
+            for view_name, prompt in MultiViewGenerator.VIEWS.items():
+                stage_msg(1, f"Generating {view_name} view...")
+                generated = mv._generate_view_with_retry(resized, prompt, view_name)
+                path = os.path.join(stage1_dir, f"{view_name}.png")
+                generated.save(path, format="PNG")
+                view_paths.append(path)
+                view_images.append(generated)
+                emit("view", {
+                    "position": view_name,
+                    "url": f"/api/images/{job_id}/stage1/{view_name}.png",
+                })
+
+            pil_input.close()
 
         # ------------------------------------------------------------------
         # Stage 2 — Dataset synthesis (Flux 2)
