@@ -53,6 +53,15 @@ MODEL_REGISTRY: dict[str, dict] = {
         "ready_subdir": "text_encoder",
         "size_hint": "~8 GB",
     },
+    "zimage_tokenizer": {
+        "repo_id": "Tongyi-MAI/Z-Image-Turbo",
+        "subdir": "z_image",
+        "description": "Z-Image Qwen3 tokenizer (from official Z-Image repo)",
+        "snapshot": True,
+        "allow_patterns": ["tokenizer/**"],
+        "ready_subdir": "tokenizer",
+        "size_hint": "~7 MB",
+    },
     # --- FLUX.1-Krea-dev (alternative training base) ---
     "flux_krea": {
         "repo_id": "black-forest-labs/FLUX.1-Krea-dev",
