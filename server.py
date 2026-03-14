@@ -160,6 +160,7 @@ _jobs_lock = threading.Lock()
 JOBS_DIR = os.environ.get("JOBS_DIR", "/workspace/character_jobs")
 MODELS_DIR = os.environ.get("MODELS_DIR", "/workspace/models")
 TOOLKIT_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai-toolkit")
+SEEDVR2_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "SeedVR2-CLI")
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +195,7 @@ def start_pipeline():
         "gemini_key": request.form.get("gemini_key", "").strip(),
         "hf_token": request.form.get("hf_token", "").strip() or None,
         "num_images": int(request.form.get("num_images", 25)),
-        "lora_rank": int(request.form.get("lora_rank", 16)),
+        "lora_rank": int(request.form.get("lora_rank", 32)),
         "lora_steps": int(request.form.get("lora_steps", 1500)),
         "learning_rate": float(request.form.get("learning_rate", 1e-4)),
         "inference_steps": int(request.form.get("inference_steps", 50)),
@@ -669,6 +670,27 @@ def _run_pipeline(
             for img in view_images:
                 img.close()
             gc.collect()
+
+            # ------------------------------------------------------------------
+            # Stage 2a — SeedVR2 Upscale (1024→2048)
+            # ------------------------------------------------------------------
+            if os.path.isdir(SEEDVR2_PATH):
+                stage_msg(2, "Upscaling dataset to 2048px with SeedVR2 7B...")
+                from stages.upscale import ImageUpscaler
+
+                def upscale_progress(current: int, total: int) -> None:
+                    stage_msg(2, f"Upscaling image {current}/{total}...")
+
+                upscaler = ImageUpscaler(cli_dir=SEEDVR2_PATH)
+                upscaler.upscale_dataset(
+                    dataset_dir=dataset_dir,
+                    target_resolution=2048,
+                    progress_callback=upscale_progress,
+                )
+                del upscaler
+                gc.collect()
+            else:
+                print("[Chimera] SeedVR2 CLI not found — skipping upscale stage.")
 
             # ------------------------------------------------------------------
             # Stage 2b — Captioning (Florence 2)

@@ -98,7 +98,7 @@ class LoRATrainer:
         rank: int = 16,
         learning_rate: float = 1e-4,
         steps: int = 1000,
-        resolution: int = 1024,
+        resolution: int = 2048,
         batch_size: int = 1,
         save_every: int = 250,
         sample_every: int = 250,
