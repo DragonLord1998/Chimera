@@ -285,7 +285,7 @@ def _run_pipeline(
         # ------------------------------------------------------------------
         view_paths: list[str] = []
         view_images: list = []
-        view_names = ["left", "front", "right"]
+        view_names = ["left", "front", "right", "face", "back"]
 
         if views_zip_path and os.path.isfile(views_zip_path):
             import zipfile
@@ -315,8 +315,8 @@ def _run_pipeline(
                     f for f in os.listdir(stage1_dir)
                     if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
                 ])
-                for i, fname in enumerate(all_imgs[:3]):
-                    vn = view_names[i]
+                for i, fname in enumerate(all_imgs[:5]):
+                    vn = view_names[i] if i < len(view_names) else f"view{i}"
                     src = os.path.join(stage1_dir, fname)
                     dst = os.path.join(stage1_dir, f"{vn}.png")
                     img = Image.open(src).convert("RGB")

@@ -25,8 +25,8 @@ class MultiViewGeneratorError(Exception):
 
 class MultiViewGenerator:
     """
-    Generates left / front / right views of a character from a single input image
-    by calling the Google Gemini image generation API.
+    Generates left / front / right / face / back views of a character from a single
+    input image by calling the Google Gemini image generation API.
 
     Attributes:
         MODEL: Gemini model identifier for image generation.
@@ -57,6 +57,19 @@ class MultiViewGenerator:
             "facing to the left of the frame so we see only the right side of their body. "
             "The character's nose points to the left. "
             "Keep all features, clothing, and appearance identical to the reference. "
+            "Plain white background. Full body from head to feet. High quality, detailed."
+        ),
+        "face": (
+            "Generate a close-up portrait of this exact character's face and upper shoulders. "
+            "Front-facing, looking directly at the camera. Show fine facial details: eyes, nose, "
+            "mouth, skin texture, hair style, and any facial markings or accessories. "
+            "Keep all features identical to the reference. "
+            "Plain white background. High quality, highly detailed."
+        ),
+        "back": (
+            "Generate a full body rear view of this exact character, facing directly away "
+            "from the camera. We see only the back of their head, back, and body. "
+            "Keep all features, clothing, hair, and appearance identical to the reference. "
             "Plain white background. Full body from head to feet. High quality, detailed."
         ),
     }

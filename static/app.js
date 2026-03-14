@@ -20,6 +20,22 @@ function activateSection(id) {
   if (el) el.classList.add("active");
 }
 
+function resetViewPlaceholders() {
+  const slots = [
+    { id: "viewLeft",  icon: "L",  label: "Left Side Fullbody" },
+    { id: "viewFront", icon: "F",  label: "Front Face" },
+    { id: "viewRight", icon: "R",  label: "Right Side Fullbody" },
+    { id: "viewFace",  icon: "FC", label: "Face Close-up" },
+    { id: "viewBack",  icon: "B",  label: "Back Fullbody" },
+  ];
+  for (const slot of slots) {
+    const el = document.getElementById(slot.id);
+    if (!el) continue;
+    el.classList.remove("loaded");
+    el.innerHTML = `<div class="placeholder-inner"><div class="placeholder-icon">${slot.icon}</div><span>${slot.label}</span></div>`;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Synthetic grid initialisation
 // ---------------------------------------------------------------------------
@@ -124,9 +140,9 @@ function onViewEvent(data, jobId) {
   el.classList.add("loaded");
   activateSection("sectionViews");
 
-  // Show download button once all 3 views are loaded
+  // Show download button once all 5 views are loaded
   const loaded = document.querySelectorAll(".view-placeholder.loaded").length;
-  if (loaded >= 3 && jobId) {
+  if (loaded >= 5 && jobId) {
     const dlBtn = document.getElementById("downloadViewsBtn");
     dlBtn.href = `/api/download-views/${jobId}`;
     dlBtn.hidden = false;
@@ -227,8 +243,8 @@ document.addEventListener("DOMContentLoaded", () => {
         .filter(name => !zip.files[name].dir && /\.(png|jpg|jpeg|webp)$/i.test(name))
         .sort();
 
-      const viewSlots = ["viewLeft", "viewFront", "viewRight"];
-      const viewNames = ["left", "front", "right"];
+      const viewSlots = ["viewLeft", "viewFront", "viewRight", "viewFace", "viewBack"];
+      const viewNames = ["left", "front", "right", "face", "back"];
 
       // Try matching by name first (left.png, front.png, right.png)
       const matched = [];
@@ -272,19 +288,7 @@ document.addEventListener("DOMContentLoaded", () => {
     viewsZipInput.value = "";
 
     // Reset view placeholders
-    ["viewLeft", "viewFront", "viewRight"].forEach(id => {
-      const el = document.getElementById(id);
-      const viewName = id.replace("view", "");
-      const shortLabel = viewName === "Left" ? "L" : viewName === "Front" ? "F" : "R";
-      const longLabel = viewName === "Left" ? "Left Side Fullbody"
-                      : viewName === "Front" ? "Front Face"
-                      : "Right Side Fullbody";
-      el.classList.remove("loaded");
-      el.innerHTML = `<div class="placeholder-inner">
-        <div class="placeholder-icon">${shortLabel}</div>
-        <span>${longLabel}</span>
-      </div>`;
-    });
+    resetViewPlaceholders();
     document.getElementById("sectionViews").classList.remove("active");
   });
 
@@ -351,19 +355,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("syntheticCount").textContent = `0 / ${numImages}`;
 
     // Reset view placeholders
-    ["viewLeft", "viewFront", "viewRight"].forEach(id => {
-      const el = document.getElementById(id);
-      const viewName = id.replace("view", "");
-      const shortLabel = viewName === "Left" ? "L" : viewName === "Front" ? "F" : "R";
-      const longLabel = viewName === "Left" ? "Left Side Fullbody"
-                      : viewName === "Front" ? "Front Face"
-                      : "Right Side Fullbody";
-      el.classList.remove("loaded");
-      el.innerHTML = `<div class="placeholder-inner">
-        <div class="placeholder-icon">${shortLabel}</div>
-        <span>${longLabel}</span>
-      </div>`;
-    });
+    resetViewPlaceholders();
 
     // Reset progress
     document.getElementById("progressFill").style.width = "0%";

@@ -128,7 +128,7 @@ class DatasetSynthesizer:
         reference_images: list[Image.Image],
         width: int = 1024,
         height: int = 1024,
-        guidance_scale: float = 2.5,
+        guidance_scale: float = 5.0,
         num_inference_steps: int = 50,
         seed: Optional[int] = None,
     ) -> Image.Image:
@@ -146,7 +146,7 @@ class DatasetSynthesizer:
         width, height:
             Output resolution in pixels.  Defaults to 1024x1024.
         guidance_scale:
-            CFG scale.  2.5 is recommended for image-conditioned Flux 2 DEV.
+            CFG scale.  5.0 for stronger reference adherence.
         num_inference_steps:
             Denoising steps.  50 gives a good quality/speed balance.
         seed:
