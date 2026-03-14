@@ -212,6 +212,75 @@ function onErrorEvent(data, evtSource, startBtn) {
 }
 
 // ---------------------------------------------------------------------------
+// SSE connection (reusable — used by start button and auto-reconnect)
+// ---------------------------------------------------------------------------
+
+function connectToJob(jobId, startBtn) {
+  startBtn.disabled = true;
+  setStatus(`Running… job ${jobId}`, "running");
+
+  const evtSource = new EventSource(`/api/stream/${jobId}`);
+
+  evtSource.addEventListener("stage", e => {
+    onStageEvent(JSON.parse(e.data));
+  });
+
+  evtSource.addEventListener("view", e => {
+    onViewEvent(JSON.parse(e.data), jobId);
+  });
+
+  evtSource.addEventListener("synthetic", e => {
+    onSyntheticEvent(JSON.parse(e.data));
+  });
+
+  evtSource.addEventListener("progress", e => {
+    onProgressEvent(JSON.parse(e.data));
+  });
+
+  evtSource.addEventListener("checkpoint", e => {
+    onCheckpointEvent(JSON.parse(e.data));
+  });
+
+  evtSource.addEventListener("complete", e => {
+    onCompleteEvent(JSON.parse(e.data), evtSource, startBtn);
+  });
+
+  evtSource.addEventListener("error", e => {
+    if (e.data) {
+      try {
+        onErrorEvent(JSON.parse(e.data), evtSource, startBtn);
+      } catch (_) {
+        // connection-level error (no data) — ignore heartbeat drops
+      }
+    }
+  });
+
+  evtSource.addEventListener("heartbeat", () => {
+    // Keep-alive — do nothing
+  });
+
+  // Fallback timeout: if no event arrives for 5 minutes, surface an error
+  let lastActivity = Date.now();
+  const activityGuard = setInterval(() => {
+    if (Date.now() - lastActivity > 5 * 60 * 1000) {
+      clearInterval(activityGuard);
+      onErrorEvent(
+        { message: "No activity for 5 minutes. Check server logs." },
+        evtSource,
+        startBtn,
+      );
+    }
+  }, 30_000);
+
+  ["stage", "view", "synthetic", "progress", "checkpoint", "complete", "heartbeat"].forEach(
+    name => evtSource.addEventListener(name, () => { lastActivity = Date.now(); })
+  );
+
+  evtSource.addEventListener("complete", () => clearInterval(activityGuard));
+  evtSource.addEventListener("error",    () => clearInterval(activityGuard));
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -416,73 +485,30 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    setStatus(`Running… job ${jobId}`, "running");
-
-    // ---------------------------------------------------------------------------
-    // SSE connection
-    // ---------------------------------------------------------------------------
-
-    const evtSource = new EventSource(`/api/stream/${jobId}`);
-
-    evtSource.addEventListener("stage", e => {
-      onStageEvent(JSON.parse(e.data));
-    });
-
-    evtSource.addEventListener("view", e => {
-      onViewEvent(JSON.parse(e.data), jobId);
-    });
-
-    evtSource.addEventListener("synthetic", e => {
-      onSyntheticEvent(JSON.parse(e.data));
-    });
-
-    evtSource.addEventListener("progress", e => {
-      onProgressEvent(JSON.parse(e.data));
-    });
-
-    evtSource.addEventListener("checkpoint", e => {
-      onCheckpointEvent(JSON.parse(e.data));
-    });
-
-    evtSource.addEventListener("complete", e => {
-      onCompleteEvent(JSON.parse(e.data), evtSource, startBtn);
-    });
-
-    evtSource.addEventListener("error", e => {
-      // The native EventSource 'error' event fires on connection drop too
-      if (e.data) {
-        try {
-          onErrorEvent(JSON.parse(e.data), evtSource, startBtn);
-        } catch (_) {
-          // connection-level error (no data) — ignore heartbeat drops
-        }
-      }
-    });
-
-    evtSource.addEventListener("heartbeat", () => {
-      // Keep-alive — do nothing
-    });
-
-    // Fallback timeout: if no event arrives for 5 minutes, surface an error
-    let lastActivity = Date.now();
-    const activityGuard = setInterval(() => {
-      if (Date.now() - lastActivity > 5 * 60 * 1000) {
-        clearInterval(activityGuard);
-        onErrorEvent(
-          { message: "No activity for 5 minutes. Check server logs." },
-          evtSource,
-          startBtn,
-        );
-      }
-    }, 30_000);
-
-    // Reset timer on any message
-    ["stage", "view", "synthetic", "progress", "checkpoint", "complete", "heartbeat"].forEach(
-      name => evtSource.addEventListener(name, () => { lastActivity = Date.now(); })
-    );
-
-    // Clear guard when done
-    evtSource.addEventListener("complete", () => clearInterval(activityGuard));
-    evtSource.addEventListener("error",    () => clearInterval(activityGuard));
+    connectToJob(jobId, startBtn);
   });
+
+  // ---------------------------------------------------------------------------
+  // Auto-reconnect: check for active job on page load
+  // ---------------------------------------------------------------------------
+
+  (async () => {
+    try {
+      const resp = await fetch("/api/jobs/active");
+      const data = await resp.json();
+      if (data.job_id) {
+        console.log("[reconnect] Found active job:", data.job_id);
+
+        // Prepare the grid with the right count
+        const numImages = (data.params && data.params.num_images) || 25;
+        initSyntheticGrid(numImages);
+        document.getElementById("syntheticCount").textContent = `0 / ${numImages}`;
+
+        // Reconnect — the server replays all past events
+        connectToJob(data.job_id, startBtn);
+      }
+    } catch (err) {
+      console.log("[reconnect] No active job or server unreachable:", err.message);
+    }
+  })();
 });

@@ -21,6 +21,7 @@ import json
 import queue
 import sys
 import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -32,7 +33,9 @@ app = Flask(__name__, static_folder="static")
 # Global job store
 # ---------------------------------------------------------------------------
 
-# job_id -> {"queue": queue.Queue, "lora_path": str | None, "job_dir": str}
+# job_id -> { "history": [...], "subscribers": [Queue, ...],
+#              "lora_path": str | None, "job_dir": str, "status": str,
+#              "params": dict }
 _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
 
@@ -116,19 +119,24 @@ def start_pipeline():
         views_zip_path = os.path.join(job_dir, "views.zip")
         views_zip.save(views_zip_path)
 
-    # Create event queue and register job
-    event_queue: queue.Queue = queue.Queue()
+    # Register job with event history and subscriber list
     with _jobs_lock:
         _jobs[job_id] = {
-            "queue": event_queue,
+            "history": [],
+            "subscribers": [],
             "lora_path": None,
             "job_dir": job_dir,
+            "status": "running",
+            "params": {
+                "num_images": params["num_images"],
+                "lora_steps": params["lora_steps"],
+            },
         }
 
     # Launch pipeline in background thread
     thread = threading.Thread(
         target=_run_pipeline,
-        args=(job_id, event_queue, image_path, job_dir, params, views_zip_path),
+        args=(job_id, image_path, job_dir, params, views_zip_path),
         daemon=True,
         name=f"pipeline-{job_id}",
     )
@@ -147,19 +155,40 @@ def stream(job_id: str):
     def generate():
         with _jobs_lock:
             job = _jobs.get(job_id)
-        if not job:
-            yield _sse("error", {"message": f"Unknown job: {job_id}"})
+            if not job:
+                yield _sse("error", {"message": f"Unknown job: {job_id}"})
+                return
+
+            # Snapshot history and subscribe atomically — no event gap
+            history = list(job["history"])
+            sub_q: queue.Queue = queue.Queue()
+            job["subscribers"].append(sub_q)
+
+        # Replay all past events so the UI rebuilds its state
+        for event in history:
+            yield _sse(event["type"], event["data"])
+
+        # If job already finished, no need to wait for live events
+        if job["status"] in ("complete", "error"):
+            with _jobs_lock:
+                if sub_q in job["subscribers"]:
+                    job["subscribers"].remove(sub_q)
             return
 
-        q = job["queue"]
-        while True:
-            try:
-                event = q.get(timeout=30)
-                if event is None:  # sentinel — pipeline finished
-                    break
-                yield _sse(event["type"], event["data"])
-            except queue.Empty:
-                yield "event: heartbeat\ndata: {}\n\n"
+        # Stream live events
+        try:
+            while True:
+                try:
+                    event = sub_q.get(timeout=30)
+                    if event is None:  # sentinel — pipeline finished
+                        break
+                    yield _sse(event["type"], event["data"])
+                except queue.Empty:
+                    yield "event: heartbeat\ndata: {}\n\n"
+        finally:
+            with _jobs_lock:
+                if sub_q in job.get("subscribers", []):
+                    job["subscribers"].remove(sub_q)
 
     return Response(generate(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache",
@@ -168,6 +197,20 @@ def stream(job_id: str):
 
 def _sse(event_type: str, data: dict) -> str:
     return f"event: {event_type}\ndata: {json.dumps(data)}\n\n"
+
+
+@app.route("/api/jobs/active")
+def active_job():
+    """Return the most recent running job, if any."""
+    with _jobs_lock:
+        for job_id, job in reversed(list(_jobs.items())):
+            if job["status"] == "running":
+                return jsonify({
+                    "job_id": job_id,
+                    "status": "running",
+                    "params": job.get("params", {}),
+                })
+    return jsonify({"job_id": None})
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +288,6 @@ def download_views(job_id: str):
 
 def _run_pipeline(
     job_id: str,
-    q: queue.Queue,
     image_path: str | None,
     job_dir: str,
     params: dict,
@@ -254,7 +296,13 @@ def _run_pipeline(
     """Full pipeline: model check → multi-view → synthesize → caption → train."""
 
     def emit(event_type: str, data: dict) -> None:
-        q.put({"type": event_type, "data": data})
+        event = {"type": event_type, "data": data}
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job:
+                job["history"].append(event)
+                for sub_q in job["subscribers"]:
+                    sub_q.put(event)
 
     def stage_msg(stage: int, status: str) -> None:
         emit("stage", {"stage": stage, "status": status})
@@ -513,14 +561,27 @@ def _run_pipeline(
             "download_url": f"/api/download/{job_id}",
         })
 
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["status"] = "complete"
+
     except Exception as exc:
         import traceback
         tb = traceback.format_exc()
         print(f"[server] Pipeline error for job {job_id}:\n{tb}", file=sys.stderr)
         emit("error", {"message": str(exc)})
 
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id]["status"] = "error"
+
     finally:
-        q.put(None)  # sentinel — tells SSE generator to stop
+        # Send sentinel to all subscribers so SSE generators stop
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job:
+                for sub_q in job["subscribers"]:
+                    sub_q.put(None)
 
 
 # ---------------------------------------------------------------------------
