@@ -236,7 +236,7 @@ class DatasetSynthesizer:
                 f"for num_images={num_images}."
             )
 
-        from ..utils.prompt_templates import get_prompt_templates
+        from utils.prompt_templates import get_prompt_templates
 
         templates = get_prompt_templates(num_images)
         output_path = Path(output_dir)

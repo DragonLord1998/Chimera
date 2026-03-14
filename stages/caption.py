@@ -12,7 +12,7 @@ from typing import Optional
 import torch
 from PIL import Image
 
-from ..utils.identity_stripper import IdentityStripper
+from utils.identity_stripper import IdentityStripper
 
 
 class CaptionGeneratorError(Exception):
