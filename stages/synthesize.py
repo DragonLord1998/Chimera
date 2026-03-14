@@ -18,6 +18,16 @@ from typing import Callable, Optional
 import torch
 from PIL import Image
 
+# Fix transformers 5.x bug: tf/tensorflow_text backends referenced but not
+# in BACKENDS_MAPPING.  Patch before importing diffusers to avoid crash.
+try:
+    from transformers.utils import import_utils as _tiu
+    for _be in ("tf", "tensorflow_text"):
+        if _be not in _tiu.BACKENDS_MAPPING:
+            _tiu.BACKENDS_MAPPING[_be] = (lambda: False, f"{_be} is not installed.")
+except Exception:
+    pass
+
 try:
     from diffusers import Flux2Pipeline
 except ImportError as _flux2_import_error:  # noqa: F841
