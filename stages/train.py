@@ -313,13 +313,13 @@ class LoRATrainer:
                         "sample": {
                             "sampler": "flowmatch",
                             "sample_every": sample_every,
-                            "width": resolution,
-                            "height": resolution,
+                            "width": 1024,
+                            "height": 1024,
                             "prompts": sample_prompts,
                             "seed": 42,
                             "walk_seed": True,
                             "guidance_scale": 4.5 if self.base_model == "flux_krea" else 4.0,
-                            "sample_steps": 50,
+                            "sample_steps": 20,
                         },
                     }
                 ],
