@@ -33,16 +33,30 @@ except (OSError, ImportError):
         _sub_mod.__spec__ = importlib.machinery.ModuleSpec(f"torchaudio.{_sub}", None)
         sys.modules[f"torchaudio.{_sub}"] = _sub_mod
 
-# Mock huggingface_hub.Repository — removed in huggingface_hub >= 1.0 but AI Toolkit still imports it.
+# Mock removed huggingface_hub classes — AI Toolkit still imports them but they were
+# dropped in huggingface_hub >= 1.0 (Repository, HfFolder, etc).
+import huggingface_hub as _hfhub
+if not hasattr(_hfhub, "Repository"):
+    class _MockRepository:
+        def __init__(self, *a, **kw):
+            raise NotImplementedError("Repository was removed in huggingface_hub >= 1.0")
+    _hfhub.Repository = _MockRepository
+if not hasattr(_hfhub, "HfFolder"):
+    class _MockHfFolder:
+        @classmethod
+        def get_token(cls):
+            return _hfhub.get_token() if hasattr(_hfhub, "get_token") else None
+        @classmethod
+        def save_token(cls, token):
+            pass
+    _hfhub.HfFolder = _MockHfFolder
+# Also patch in huggingface_hub.utils where some code imports it from
 try:
-    from huggingface_hub import Repository  # noqa: F401
+    import huggingface_hub.utils as _hfutils
+    if not hasattr(_hfutils, "HfFolder"):
+        _hfutils.HfFolder = _hfhub.HfFolder
 except ImportError:
-    import huggingface_hub as _hfhub
-    if not hasattr(_hfhub, "Repository"):
-        class _MockRepository:
-            def __init__(self, *a, **kw):
-                raise NotImplementedError("Repository was removed in huggingface_hub >= 1.0")
-        _hfhub.Repository = _MockRepository
+    pass
 
 import datetime
 import gc
