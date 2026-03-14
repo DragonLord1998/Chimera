@@ -679,27 +679,61 @@ def _run_pipeline(
         )
 
         total_steps = params["lora_steps"]
-        save_every = 500  # emit progress / checkpoint events every 500 steps
+        save_every = 500  # checkpoint / sample interval
 
-        # AI Toolkit doesn't expose a step callback natively; we poll the
-        # samples output directory in a background watcher thread while the
-        # trainer runs.  The watcher reports progress by counting checkpoint
-        # files as they appear.
         samples_dir = os.path.join(output_dir, output_name, "samples")
         checkpoint_dir_path = os.path.join(output_dir, output_name)
         _stop_watcher = threading.Event()
 
+        num_sample_prompts = len(params.get("sample_prompts") or [
+            "default1", "default2",
+        ])
+
+        # Shared state: stderr capture writes current step, watcher reads it
+        _tqdm_step = [0]  # [current_step] — mutable for thread safety
+
+        import re as _re
+        _TQDM_RE = _re.compile(r'\b(\d+)/(\d+)\s*\[')
+
+        class _StderrCapture:
+            """Wraps stderr to parse tqdm progress from AI Toolkit in real time."""
+            def __init__(self, real):
+                self._real = real
+
+            def write(self, s):
+                self._real.write(s)
+                m = _TQDM_RE.search(s)
+                if m:
+                    _tqdm_step[0] = int(m.group(1))
+                return len(s)
+
+            def flush(self):
+                self._real.flush()
+
+            def __getattr__(self, name):
+                return getattr(self._real, name)
+
         def _watcher():
-            """Poll for new .safetensors checkpoints and sample images."""
+            """Poll tqdm progress, checkpoint files, and sample images."""
             seen_checkpoints: set[str] = set()
             seen_samples: set[str] = set()
             step_estimate = 0
-            sample_batch_count = 0
+            last_emitted_step = -1
+            # Buffer: step_num -> {"urls": [...], "first_seen": timestamp}
+            pending_samples: dict[int, dict] = {}
 
             while not _stop_watcher.is_set():
-                time.sleep(3)
+                time.sleep(2)
 
-                # Count checkpoints to estimate step
+                # 1. Real-time step from tqdm stderr capture
+                tqdm_current = _tqdm_step[0]
+                if tqdm_current > step_estimate:
+                    step_estimate = tqdm_current
+                if step_estimate != last_emitted_step:
+                    emit("progress", {"step": step_estimate, "total": total_steps})
+                    last_emitted_step = step_estimate
+
+                # 2. Checkpoint .safetensors files (for accurate step on save)
                 if os.path.isdir(checkpoint_dir_path):
                     ckpts = sorted(
                         f for f in os.listdir(checkpoint_dir_path)
@@ -708,71 +742,71 @@ def _run_pipeline(
                     new_ckpts = [c for c in ckpts if c not in seen_checkpoints]
                     for ckpt_name in new_ckpts:
                         seen_checkpoints.add(ckpt_name)
-                        # Extract step number from filename like foo_lora_step00500.safetensors
-                        try:
-                            step_str = ckpt_name.rsplit("step", 1)[-1].replace(".safetensors", "")
-                            step_estimate = int(step_str)
-                        except (ValueError, IndexError):
-                            step_estimate += save_every
 
-                        emit("progress", {"step": step_estimate, "total": total_steps})
-
-                # Check for sample images independently (AI Toolkit outputs .jpg)
+                # 3. Sample images (AI Toolkit outputs .jpg)
                 if os.path.isdir(samples_dir):
                     sample_files = sorted(
                         f for f in os.listdir(samples_dir)
                         if (f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg"))
                         and f not in seen_samples
                     )
-                    if sample_files:
-                        batch: list[str] = []
-                        max_sample_step = 0
-                        for sf in sample_files:
-                            seen_samples.add(sf)
-                            batch.append(
-                                f"/api/images/{job_id}/output/{output_name}/samples/{sf}"
-                            )
-                            # Parse step from filename like {timestamp}__{step:09d}_{idx}.jpg
-                            try:
-                                parts = sf.rsplit(".", 1)[0]  # strip extension
-                                step_part = parts.split("__")[1].split("_")[0]
-                                max_sample_step = max(max_sample_step, int(step_part))
-                            except (IndexError, ValueError):
-                                pass
+                    for sf in sample_files:
+                        seen_samples.add(sf)
+                        url = f"/api/images/{job_id}/output/{output_name}/samples/{sf}"
+                        # Parse step from filename: {timestamp}__{step:09d}_{idx}.ext
+                        parsed_step = -1
+                        try:
+                            parts = sf.rsplit(".", 1)[0]
+                            step_part = parts.split("__")[1].split("_")[0]
+                            parsed_step = int(step_part)
+                        except (IndexError, ValueError):
+                            pass
 
-                        if batch:
-                            # Use parsed step, or estimate from batch count
-                            if max_sample_step > 0:
-                                reported_step = max_sample_step
-                            else:
-                                sample_batch_count += 1
-                                reported_step = sample_batch_count * save_every
+                        if parsed_step not in pending_samples:
+                            pending_samples[parsed_step] = {
+                                "urls": [], "first_seen": time.time(),
+                            }
+                        pending_samples[parsed_step]["urls"].append(url)
 
-                            if reported_step > step_estimate:
-                                step_estimate = reported_step
-                                emit("progress", {"step": step_estimate, "total": total_steps})
+                # 4. Emit checkpoint events for completed sample groups
+                now = time.time()
+                done_steps = []
+                for s_step, info in sorted(pending_samples.items()):
+                    have_all = len(info["urls"]) >= num_sample_prompts
+                    timed_out = (now - info["first_seen"]) > 60
+                    if have_all or timed_out:
+                        emit("checkpoint", {
+                            "step": s_step if s_step >= 0 else step_estimate,
+                            "images": info["urls"],
+                        })
+                        done_steps.append(s_step)
 
-                            emit("checkpoint", {
-                                "step": step_estimate,
-                                "images": batch,
-                            })
+                for s in done_steps:
+                    del pending_samples[s]
 
         watcher_thread = threading.Thread(target=_watcher, daemon=True,
                                           name=f"watcher-{job_id}")
         watcher_thread.start()
 
-        lora_path = trainer.train(
-            dataset_dir=dataset_dir,
-            output_dir=output_dir,
-            output_name=output_name,
-            trigger_word=trigger,
-            rank=params["lora_rank"],
-            learning_rate=params["learning_rate"],
-            steps=total_steps,
-            save_every=save_every,
-            sample_every=save_every,
-            sample_prompts=params["sample_prompts"],
-        )
+        # Capture stderr to parse tqdm progress in real time
+        _real_stderr = sys.stderr
+        sys.stderr = _StderrCapture(_real_stderr)
+
+        try:
+            lora_path = trainer.train(
+                dataset_dir=dataset_dir,
+                output_dir=output_dir,
+                output_name=output_name,
+                trigger_word=trigger,
+                rank=params["lora_rank"],
+                learning_rate=params["learning_rate"],
+                steps=total_steps,
+                save_every=save_every,
+                sample_every=save_every,
+                sample_prompts=params["sample_prompts"],
+            )
+        finally:
+            sys.stderr = _real_stderr
 
         _stop_watcher.set()
         watcher_thread.join(timeout=5)
