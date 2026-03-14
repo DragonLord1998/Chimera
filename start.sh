@@ -11,7 +11,7 @@ echo "[Chimera] Patching transformers..."
 python3 fix_transformers.py
 
 echo "[Chimera] Installing/upgrading dependencies..."
-pip install -q --break-system-packages flask pillow google-genai 2>/dev/null || true
+pip install -q --break-system-packages flask pillow google-genai sentencepiece 2>/dev/null || true
 pip install -q --break-system-packages -U "transformers>=5.0" "diffusers>=0.32.0" 2>/dev/null || true
 
 # Clone AI Toolkit if not present
