@@ -11,3 +11,4 @@ models/
 *.safetensors
 .omc/
 .technomancer/
+.DS_Store

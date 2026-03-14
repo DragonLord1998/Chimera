@@ -21,30 +21,15 @@ from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError
 # ---------------------------------------------------------------------------
 
 MODEL_REGISTRY: dict[str, dict] = {
-    # --- Flux 2 DEV components (from Comfy-Org's public split-file repo) ---
-    "flux2_dev": {
+    # --- Flux 2 DEV (full diffusers-format repo from Comfy-Org, public) ---
+    "flux2": {
         "repo_id": "Comfy-Org/flux2-dev",
-        "filename": "flux2_dev_fp8mixed.safetensors",
-        "repo_subfolder": "split_files/diffusion_models",
         "subdir": "flux2",
-        "description": "Flux 2 DEV fp8 diffusion model",
-        "size_hint": "~17 GB",
-    },
-    "flux2_vae": {
-        "repo_id": "Comfy-Org/flux2-dev",
-        "filename": "flux2-vae.safetensors",
-        "repo_subfolder": "split_files/vae",
-        "subdir": "flux2",
-        "description": "Flux 2 VAE",
-        "size_hint": "~335 MB",
-    },
-    "flux2_text_enc": {
-        "repo_id": "Comfy-Org/flux2-dev",
-        "filename": "mistral_3_small_flux2_bf16.safetensors",
-        "repo_subfolder": "split_files/text_encoders",
-        "subdir": "flux2",
-        "description": "Mistral Small 3.1 text encoder for Flux 2",
-        "size_hint": "~7 GB",
+        "description": "Flux 2 DEV (diffusers format, includes transformer + VAE + text encoder)",
+        "snapshot": True,
+        "ignore_patterns": ["split_files/**"],
+        "ready_subdir": "transformer",
+        "size_hint": "~25 GB",
     },
     # --- Florence 2 (captioning) ---
     "florence2": {
@@ -233,10 +218,12 @@ class ModelManager:
             common_kwargs["token"] = self.hf_token
 
         if spec.get("snapshot"):
+            base_ignore = ["*.msgpack", "*.h5", "flax_model*", "tf_model*"]
+            extra_ignore = spec.get("ignore_patterns", [])
             snapshot_kwargs = {
                 **common_kwargs,
                 "resume_download": True,
-                "ignore_patterns": ["*.msgpack", "*.h5", "flax_model*", "tf_model*"],
+                "ignore_patterns": base_ignore + extra_ignore,
             }
             if spec.get("allow_patterns"):
                 snapshot_kwargs["allow_patterns"] = spec["allow_patterns"]

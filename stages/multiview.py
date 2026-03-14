@@ -40,19 +40,24 @@ class MultiViewGenerator:
 
     VIEWS: dict[str, str] = {
         "left": (
-            "Generate a full body left side profile view of this exact character. "
-            "Keep all features, clothing, and appearance identical. "
-            "Plain white background. High quality, detailed."
+            "Generate a full body 90-degree left side profile view of this exact character, "
+            "facing to the right of the frame so we see only the left side of their body. "
+            "The character's nose points to the right. "
+            "Keep all features, clothing, and appearance identical to the reference. "
+            "Plain white background. Full body from head to feet. High quality, detailed."
         ),
         "front": (
-            "Generate a front-facing full body view of this exact character. "
-            "Keep all features, clothing, and appearance identical. "
-            "Plain white background. High quality, detailed."
+            "Generate a full body front-facing view of this exact character, "
+            "looking directly at the camera. Shoulders squared to the viewer. "
+            "Keep all features, clothing, and appearance identical to the reference. "
+            "Plain white background. Full body from head to feet. High quality, detailed."
         ),
         "right": (
-            "Generate a full body right side profile view of this exact character. "
-            "Keep all features, clothing, and appearance identical. "
-            "Plain white background. High quality, detailed."
+            "Generate a full body 90-degree right side profile view of this exact character, "
+            "facing to the left of the frame so we see only the right side of their body. "
+            "The character's nose points to the left. "
+            "Keep all features, clothing, and appearance identical to the reference. "
+            "Plain white background. Full body from head to feet. High quality, detailed."
         ),
     }
 

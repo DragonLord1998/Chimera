@@ -1,16 +1,11 @@
 """
 synthesize.py — Flux 2 DEV dataset synthesizer.
 
-Uses the Flux2Pipeline from diffusers to generate training images from
+Uses Flux2Pipeline from diffusers to generate training images from
 reference images.  Designed for RunPod A40 (48 GB VRAM).
 
-Memory budget at inference time:
-  fp8 diffusion model  ~17 GB
-  VAE                  ~0.5 GB
-  text encoder         ~7 GB
-  activations/buffers  ~10 GB
-  ──────────────────────────
-  total                ~34.5 GB  (comfortable on 48 GB A40)
+The pipeline is loaded via ``from_pretrained`` from a local diffusers-format
+directory and uses ``enable_model_cpu_offload()`` to manage VRAM.
 """
 
 from __future__ import annotations
@@ -32,9 +27,6 @@ except ImportError as _flux2_import_error:  # noqa: F841
         "version of diffusers.  Flux 2 DEV support was introduced in diffusers "
         ">=0.32.0.  Please upgrade:\n"
         "    pip install -U 'diffusers>=0.32.0'\n"
-        "If you are on an older version that ships Flux 2 under a different "
-        "class name, set DIFFUSERS_FLUX2_CLASS in your environment and patch "
-        "this module accordingly."
     )
 else:
     _FLUX2_UNAVAILABLE_MSG = ""
@@ -53,11 +45,9 @@ class DatasetSynthesizer:
     Parameters
     ----------
     model_path:
-        Absolute path to ``flux2_dev_fp8mixed.safetensors``.
-    vae_path:
-        Absolute path to ``flux2-vae.safetensors``.
-    text_enc_path:
-        Absolute path to the Mistral Small 3 text encoder (safetensors).
+        Path to the local diffusers-format Flux 2 DEV directory (the
+        snapshot downloaded by ModelManager, containing ``transformer/``,
+        ``vae/``, ``text_encoder/``, etc.).
     device:
         Torch device string.  Defaults to ``"cuda"``.
     """
@@ -65,13 +55,9 @@ class DatasetSynthesizer:
     def __init__(
         self,
         model_path: str,
-        vae_path: str,
-        text_enc_path: str,
         device: str = "cuda",
     ) -> None:
         self.model_path = model_path
-        self.vae_path = vae_path
-        self.text_enc_path = text_enc_path
         self.device = device
         self.pipe: Optional[Flux2Pipeline] = None  # type: ignore[type-arg]
 
@@ -80,10 +66,10 @@ class DatasetSynthesizer:
     # ------------------------------------------------------------------
 
     def load_model(self) -> None:
-        """Load the Flux 2 DEV pipeline in fp8 / bfloat16 mixed precision.
+        """Load the Flux 2 DEV pipeline via ``from_pretrained``.
 
-        Occupies ~35 GB VRAM on an A40.  Must be called before
-        :meth:`generate_image` or :meth:`synthesize_dataset`.
+        Uses ``enable_model_cpu_offload()`` to keep peak VRAM usage
+        manageable on an A40 (48 GB).
 
         Raises
         ------
@@ -99,19 +85,15 @@ class DatasetSynthesizer:
 
         logger.info("[DatasetSynthesizer] Loading Flux 2 DEV pipeline from %s ...", self.model_path)
 
-        self.pipe = Flux2Pipeline.from_single_file(
+        self.pipe = Flux2Pipeline.from_pretrained(
             self.model_path,
-            vae=self.vae_path,
-            text_encoder=self.text_enc_path,
             torch_dtype=torch.bfloat16,
         )
-        self.pipe = self.pipe.to(self.device)
+        # CPU offloading moves each module to GPU only when needed,
+        # keeping peak VRAM below 48 GB for the 32B param model.
+        self.pipe.enable_model_cpu_offload()
 
-        # Enable attention slicing as a lightweight memory safety net.
-        # On a 48 GB A40 this has negligible performance impact.
-        self.pipe.enable_attention_slicing()
-
-        logger.info("[DatasetSynthesizer] Pipeline ready on %s.", self.device)
+        logger.info("[DatasetSynthesizer] Pipeline ready (cpu offload enabled).")
 
     def unload_model(self) -> None:
         """Delete the pipeline and release all VRAM for the training stage."""
@@ -140,10 +122,8 @@ class DatasetSynthesizer:
     ) -> Image.Image:
         """Generate a single image using Flux 2 DEV with reference images.
 
-        Flux 2 DEV accepts up to 10 reference images via sequential token
-        concatenation.  They are passed as a list to the ``image`` parameter
-        of the pipeline.  Prompts should reference them as
-        ``"the character from image 1"``, ``"image 2"``, etc.
+        Flux 2 DEV accepts up to 10 reference images via the ``image``
+        parameter of the pipeline call.
 
         Parameters
         ----------
@@ -152,10 +132,9 @@ class DatasetSynthesizer:
         reference_images:
             List of PIL Images.  Up to 10 supported by Flux 2 DEV natively.
         width, height:
-            Output resolution in pixels.  Defaults to 1024×1024.
+            Output resolution in pixels.  Defaults to 1024x1024.
         guidance_scale:
-            CFG scale.  2.5 is recommended for image-conditioned Flux 2 DEV
-            (lower than the text-only default of 4.0).
+            CFG scale.  2.5 is recommended for image-conditioned Flux 2 DEV.
         num_inference_steps:
             Denoising steps.  50 gives a good quality/speed balance.
         seed:
@@ -165,13 +144,6 @@ class DatasetSynthesizer:
         -------
         PIL.Image.Image
             The generated image.
-
-        Raises
-        ------
-        RuntimeError
-            If the pipeline has not been loaded via :meth:`load_model`.
-        ValueError
-            If ``reference_images`` is empty or contains more than 10 images.
         """
         if self.pipe is None:
             raise RuntimeError(
@@ -190,7 +162,7 @@ class DatasetSynthesizer:
 
         generator: Optional[torch.Generator] = None
         if seed is not None:
-            generator = torch.Generator(device=self.device).manual_seed(seed)
+            generator = torch.Generator(device="cpu").manual_seed(seed)
 
         result = self.pipe(
             prompt=prompt,
@@ -218,7 +190,7 @@ class DatasetSynthesizer:
     ) -> list[str]:
         """Generate a full training dataset and save it to ``output_dir``.
 
-        Images are saved as ``img_001.png``, ``img_002.png``, … and use
+        Images are saved as ``img_001.png``, ``img_002.png``, ... and use
         deterministic seeds (``42 + i``) so a run can be resumed exactly
         from any point after a pod restart.
 
@@ -227,29 +199,18 @@ class DatasetSynthesizer:
         reference_images:
             Source images for conditioning.  Up to 10 supported.
         output_dir:
-            Directory where generated images are written.  Created if it
-            does not exist.
+            Directory where generated images are written.
         num_images:
             Total number of images to produce.  Defaults to 25.
         start_from:
-            Resume index (0-based).  Images ``0`` … ``start_from - 1`` are
-            assumed to already exist and are skipped.
+            Resume index (0-based).
         progress_callback:
-            Optional callable ``(current: int, total: int) -> None`` invoked
-            after each image is saved.
+            Optional ``(current: int, total: int)`` callable.
 
         Returns
         -------
         list[str]
-            Absolute paths of all images saved in this run (not including
-            previously completed images from a resumed run).
-
-        Raises
-        ------
-        RuntimeError
-            If the pipeline has not been loaded.
-        ValueError
-            If ``start_from`` is out of range.
+            Absolute paths of images saved in this run.
         """
         if self.pipe is None:
             raise RuntimeError(
@@ -273,7 +234,7 @@ class DatasetSynthesizer:
         remaining = num_images - start_from
 
         logger.info(
-            "[DatasetSynthesizer] Synthesizing %d image(s) (indices %d–%d) into %s ...",
+            "[DatasetSynthesizer] Synthesizing %d image(s) (indices %d-%d) into %s ...",
             remaining,
             start_from,
             num_images - 1,
