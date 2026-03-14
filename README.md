@@ -21,7 +21,8 @@ git clone --depth 1 https://github.com/ostris/ai-toolkit.git
 pip install --ignore-installed --break-system-packages -r ai-toolkit/requirements.txt
 # These MUST run after ai-toolkit install (it downgrades transformers)
 pip install --ignore-installed --break-system-packages -U transformers diffusers
-pip install --force-reinstall --break-system-packages --no-cache-dir scipy
+rm -rf /usr/local/lib/python3.12/dist-packages/scipy /usr/local/lib/python3.12/dist-packages/scipy-*.dist-info
+pip install --break-system-packages --no-cache-dir "scipy>=1.14" "numpy>=2.0"
 python3 fix_transformers.py
 python3 server.py
 ```
