@@ -92,6 +92,14 @@
           <span class="setting-hint">10 – 50 recommended</span>
         </div>
         <div class="setting-group">
+          <label class="setting-label" for="baseModel">Base Model</label>
+          <select class="setting-input" id="baseModel">
+            <option value="zimage" selected>Z-Image De-Turbo</option>
+            <option value="flux_krea">FLUX.1-Krea-dev</option>
+          </select>
+          <span class="setting-hint">Z-Image: Alibaba/Ostris | Krea: BFL aesthetic fine-tune</span>
+        </div>
+        <div class="setting-group">
           <label class="setting-label" for="loraRank">LoRA Rank</label>
           <input class="setting-input" type="number" id="loraRank" value="16" min="4" max="64" step="4">
           <span class="setting-hint">Higher = more detail, larger file</span>

@@ -53,6 +53,15 @@ MODEL_REGISTRY: dict[str, dict] = {
         "ready_subdir": "text_encoder",
         "size_hint": "~8 GB",
     },
+    # --- FLUX.1-Krea-dev (alternative training base) ---
+    "flux_krea": {
+        "repo_id": "black-forest-labs/FLUX.1-Krea-dev",
+        "subdir": "flux_krea",
+        "description": "FLUX.1-Krea-dev (BFL + Krea AI aesthetic fine-tune)",
+        "snapshot": True,
+        "size_hint": "~24 GB",
+        "gated": True,
+    },
 }
 
 _RETRY_COUNT = 3

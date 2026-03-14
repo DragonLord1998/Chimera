@@ -61,16 +61,16 @@ class LoRATrainer:
         model_path: str,
         toolkit_path: str,
         device: str = "cuda",
+        base_model: str = "zimage",
     ) -> None:
         """
         Initialise the trainer.
 
         Args:
-            model_path: Path to the Z-Image De-Turbo model directory.
-                Must contain both ``transformer/`` and ``text_encoder/``
-                subdirectories.
+            model_path: Path to the model directory.
             toolkit_path: Path to the cloned ``ai-toolkit`` repository root.
             device: PyTorch device string.  Defaults to ``"cuda"``.
+            base_model: Which base model to use — ``"zimage"`` or ``"flux_krea"``.
 
         Raises:
             ValueError: If any required path argument is empty.
@@ -83,6 +83,7 @@ class LoRATrainer:
         self.model_path = model_path
         self.toolkit_path = toolkit_path
         self.device = device
+        self.base_model = base_model
 
     # ------------------------------------------------------------------
     # Public interface
@@ -308,15 +309,7 @@ class LoRATrainer:
                             "lr": learning_rate,
                             "dtype": "bf16",
                         },
-                        "model": {
-                            "name_or_path": self.model_path,
-                            "arch": "zimage",
-                            # RTX PRO 6000 has 96 GB VRAM — transformer quantisation is not needed.
-                            "quantize": False,
-                            # Quantise the text encoder to save ~4 GB VRAM.
-                            "quantize_te": True,
-                            "qtype_te": "qfloat8",
-                        },
+                        "model": self._model_block(),
                         "sample": {
                             "sampler": "flowmatch",
                             "sample_every": sample_every,
@@ -325,7 +318,7 @@ class LoRATrainer:
                             "prompts": sample_prompts,
                             "seed": 42,
                             "walk_seed": True,
-                            "guidance_scale": 3.0,
+                            "guidance_scale": 4.5 if self.base_model == "flux_krea" else 3.0,
                             "sample_steps": 28,
                         },
                     }
@@ -335,6 +328,26 @@ class LoRATrainer:
                 "name": output_name,
                 "version": "1.0",
             },
+        }
+
+    def _model_block(self) -> dict:
+        """Return the AI Toolkit model config block for the selected base model."""
+        if self.base_model == "flux_krea":
+            return {
+                "name_or_path": self.model_path,
+                "is_flux": True,
+                # 96 GB VRAM — no need to quantise the transformer.
+                "quantize": False,
+            }
+        # Default: Z-Image De-Turbo
+        return {
+            "name_or_path": self.model_path,
+            "arch": "zimage",
+            # RTX PRO 6000 has 96 GB VRAM — transformer quantisation is not needed.
+            "quantize": False,
+            # Quantise the text encoder to save ~4 GB VRAM.
+            "quantize_te": True,
+            "qtype_te": "qfloat8",
         }
 
     # ------------------------------------------------------------------

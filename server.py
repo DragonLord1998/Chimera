@@ -80,6 +80,7 @@ def start_pipeline():
         "lora_steps": int(request.form.get("lora_steps", 1500)),
         "learning_rate": float(request.form.get("learning_rate", 1e-4)),
         "inference_steps": int(request.form.get("inference_steps", 50)),
+        "base_model": request.form.get("base_model", "zimage").strip(),
         "sample_prompts": None,
     }
 
@@ -327,7 +328,16 @@ def _run_pipeline(
         from stages.model_manager import ModelManager
 
         mm = ModelManager(base_path=MODELS_DIR, hf_token=params["hf_token"])
-        mm.ensure_all_models()
+
+        # Download models based on selected base model
+        base_model = params.get("base_model", "zimage")
+        if base_model == "flux_krea":
+            # Flux Krea only needs its own model + Florence 2 for captioning
+            for key in ("florence2", "flux_krea"):
+                if not mm.is_model_ready(key):
+                    mm._download_with_retry(key)
+        else:
+            mm.ensure_all_models()
 
         # ------------------------------------------------------------------
         # Stage 1 — Multi-view generation (Gemini) or extract from zip
@@ -457,12 +467,15 @@ def _run_pipeline(
         # ------------------------------------------------------------------
         # Stage 3 — LoRA training (AI Toolkit / Z-Image)
         # ------------------------------------------------------------------
-        stage_msg(3, "Starting LoRA training with Z-Image De-Turbo...")
+        model_label = "FLUX.1-Krea-dev" if base_model == "flux_krea" else "Z-Image De-Turbo"
+        model_key = "flux_krea" if base_model == "flux_krea" else "zimage_base"
+        stage_msg(3, f"Starting LoRA training with {model_label}...")
         from stages.train import LoRATrainer
 
         trainer = LoRATrainer(
-            model_path=mm.get_model_path("zimage_base"),
+            model_path=mm.get_model_path(model_key),
             toolkit_path=TOOLKIT_PATH,
+            base_model=base_model,
         )
 
         total_steps = params["lora_steps"]

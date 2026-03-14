@@ -458,6 +458,7 @@ document.addEventListener("DOMContentLoaded", () => {
     formData.append("gemini_key", geminiKey);
     formData.append("hf_token", document.getElementById("hfToken").value.trim());
     formData.append("num_images", numImages);
+    formData.append("base_model", document.getElementById("baseModel").value);
     formData.append("lora_rank", document.getElementById("loraRank").value);
     formData.append("lora_steps", totalSteps);
     formData.append("learning_rate", document.getElementById("learningRate").value);
