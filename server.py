@@ -147,16 +147,9 @@ try:
 except Exception:
     pass
 
-# Reset custom_adapter.py to clean upstream state (undo any broken patches).
-# The runtime stubs above make the imports succeed without file patching.
-try:
-    import subprocess as _sp
-    _aitk = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai-toolkit")
-    if os.path.isdir(os.path.join(_aitk, ".git")):
-        _sp.run(["git", "checkout", "--", "toolkit/custom_adapter.py"],
-                cwd=_aitk, capture_output=True, timeout=5)
-except Exception:
-    pass
+# Note: start.sh patches custom_adapter.py to wrap removed transformers imports
+# in try/except blocks. Do NOT git-checkout the file here — that would undo the fix.
+# The patcher in train.py also applies this fix as a safety net before training.
 
 import datetime
 import gc

@@ -378,6 +378,52 @@ class LoRATrainer:
         """Set environment variables required or recommended by AI Toolkit."""
         os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
 
+    def _patch_custom_adapter(self) -> None:
+        """
+        Wrap ``from transformers import …`` lines in ``custom_adapter.py``
+        with try/except so that classes removed in transformers 5.x
+        (ViTHybridImageProcessor, etc.) don't crash the import.
+        """
+        import re
+
+        target = os.path.join(self.toolkit_path, "toolkit", "custom_adapter.py")
+        if not os.path.isfile(target):
+            return
+
+        with open(target) as f:
+            lines = f.readlines()
+
+        patched = 0
+        i = 0
+        while i < len(lines):
+            stripped = lines[i].strip()
+            already_wrapped = i > 0 and lines[i - 1].strip() == "try:"
+            if stripped.startswith("from transformers import") and not already_wrapped:
+                m = re.match(r"from transformers import (.+)", stripped)
+                if m:
+                    indent = lines[i][: len(lines[i]) - len(lines[i].lstrip())]
+                    names = [n.strip() for n in m.group(1).split(",")]
+                    block = [
+                        indent + "try:\n",
+                        indent + "    " + stripped + "\n",
+                        indent + "except ImportError:\n",
+                    ]
+                    for name in names:
+                        block.append(indent + "    " + name + " = None\n")
+                    lines[i : i + 1] = block
+                    patched += 1
+                    i += len(block)
+                    continue
+            i += 1
+
+        if patched:
+            with open(target, "w") as f:
+                f.writelines(lines)
+            print(
+                f"[Chimera] Patched AI Toolkit: wrapped {patched} "
+                f"transformers import(s) in try/except"
+            )
+
     def _run_toolkit(self, config: dict) -> None:
         """
         Import AI Toolkit's ``run_job`` and execute the training config.
@@ -390,6 +436,7 @@ class LoRATrainer:
                 likely because ``toolkit_path`` does not point to a valid
                 AI Toolkit checkout.
         """
+        self._patch_custom_adapter()
         try:
             from toolkit.job import run_job  # type: ignore[import]
         except ImportError as exc:
