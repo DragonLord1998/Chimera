@@ -663,6 +663,11 @@ def _run_pipeline(
     try:
         from PIL import Image
 
+        # Make HF token available to all downstream libraries (diffusers, AI Toolkit)
+        # that call from_pretrained() on gated repos like FLUX.1-dev.
+        if params.get("hf_token"):
+            os.environ["HF_TOKEN"] = params["hf_token"]
+
         # Subdirectories
         stage1_dir = os.path.join(job_dir, "stage1")
         dataset_dir = os.path.join(job_dir, "dataset")
