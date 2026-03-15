@@ -997,6 +997,31 @@ body {
   border-radius: 50%;
 }
 
+.checkpoint-dl-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 3px 10px;
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  color: var(--accent);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 4px;
+  text-decoration: none;
+  transition: background 0.2s, border-color 0.2s;
+  cursor: pointer;
+}
+
+.checkpoint-dl-btn:hover {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: var(--accent);
+}
+
+.checkpoint-dl-btn svg {
+  flex-shrink: 0;
+}
+
 .checkpoint-images {
   display: grid;
   grid-template-columns: repeat(5, 1fr);

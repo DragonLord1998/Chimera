@@ -57,7 +57,7 @@ function initSyntheticGrid(count) {
 // Checkpoint rows
 // ---------------------------------------------------------------------------
 
-function addCheckpointRow(step, imageUrls) {
+function addCheckpointRow(step, imageUrls, downloadUrl) {
   const container = document.getElementById("checkpointContainer");
 
   const row = document.createElement("div");
@@ -67,6 +67,15 @@ function addCheckpointRow(step, imageUrls) {
   const label = document.createElement("div");
   label.className = "checkpoint-row-label";
   label.textContent = `Step ${step.toLocaleString()}`;
+  if (downloadUrl) {
+    const dlBtn = document.createElement("a");
+    dlBtn.className = "checkpoint-dl-btn";
+    dlBtn.href = downloadUrl;
+    dlBtn.download = "";
+    dlBtn.title = `Download LoRA at step ${step.toLocaleString()}`;
+    dlBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download LoRA`;
+    label.appendChild(dlBtn);
+  }
   row.appendChild(label);
 
   const grid = document.createElement("div");
@@ -187,7 +196,7 @@ function onProgressEvent(data) {
 }
 
 function onCheckpointEvent(data) {
-  addCheckpointRow(data.step, data.images);
+  addCheckpointRow(data.step, data.images, data.download_url || null);
 }
 
 function onDiffusionPreview(data) {
