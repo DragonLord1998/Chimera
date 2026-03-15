@@ -826,6 +826,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const file = e.target.files[0];
     if (!file || !file.name.endsWith(".zip")) return;
 
+    // Revoke previous blob URLs before loading new zip
+    resetViewPlaceholders();
     viewsZipFile = file;
     viewsZipName.textContent = file.name;
     viewsZipClear.hidden = false;
@@ -877,7 +879,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   viewsZipClear.addEventListener("click", () => {
     viewsZipFile = null;
-    viewsZipName.textContent = "";
+    viewsZipName.textContent = "Choose .zip file...";
     viewsZipClear.hidden = true;
     viewsZipInput.value = "";
 
@@ -899,7 +901,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   datasetZipClear.addEventListener("click", () => {
     datasetZipFile = null;
-    datasetZipName.textContent = "";
+    datasetZipName.textContent = "Choose .zip file...";
     datasetZipClear.hidden = true;
     datasetZipInput.value = "";
   });
@@ -947,7 +949,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (existingDataset.value) {
       // Clear zip selection (mutually exclusive)
       datasetZipFile = null;
-      datasetZipName.textContent = "";
+      datasetZipName.textContent = "Choose .zip file...";
       datasetZipClear.hidden = true;
       datasetZipInput.value = "";
     }
@@ -970,6 +972,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (gearBtn)         gearBtn.addEventListener("click", openPanel);
   if (panelClose)      panelClose.addEventListener("click", closePanel);
   if (settingsOverlay) settingsOverlay.addEventListener("click", closePanel);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && settingsPanel.classList.contains("open")) closePanel();
+  });
 
   // ---- Trigger word live preview ----
   const triggerInput   = document.getElementById("triggerWord");
@@ -1035,16 +1040,6 @@ document.addEventListener("DOMContentLoaded", () => {
   if (enhancedModeToggle && enhancementSettings) {
     enhancedModeToggle.addEventListener("change", () => {
       enhancementSettings.style.display = enhancedModeToggle.checked ? "" : "none";
-      // Update step numbers based on mode
-      const trainingStepNum = document.getElementById("trainingStepNum");
-      const checkpointStepNum = document.getElementById("checkpointStepNum");
-      if (enhancedModeToggle.checked) {
-        if (trainingStepNum) trainingStepNum.textContent = "07";
-        if (checkpointStepNum) checkpointStepNum.textContent = "08";
-      } else {
-        if (trainingStepNum) trainingStepNum.textContent = "05";
-        if (checkpointStepNum) checkpointStepNum.textContent = "06";
-      }
     });
   }
 
