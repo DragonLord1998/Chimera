@@ -133,14 +133,48 @@ try:
 except Exception:
     pass
 
-# Stub removed ViTHybrid classes — AI Toolkit imports them but they were
-# dropped in transformers 5.x. Not needed for Z-Image LoRA training.
+# Stub classes removed in transformers 5.x — AI Toolkit imports them but
+# they are not needed for LoRA training.
 try:
     import transformers as _tf
-    if not hasattr(_tf, "ViTHybridImageProcessor"):
-        _tf.ViTHybridImageProcessor = type("ViTHybridImageProcessor", (), {})
-    if not hasattr(_tf, "ViTHybridForImageClassification"):
-        _tf.ViTHybridForImageClassification = type("ViTHybridForImageClassification", (), {})
+    for _cls_name in (
+        "ViTHybridImageProcessor", "ViTHybridForImageClassification",
+        "ViTFeatureExtractor", "ViTForImageClassification",
+    ):
+        if not hasattr(_tf, _cls_name):
+            setattr(_tf, _cls_name, type(_cls_name, (), {}))
+except Exception:
+    pass
+
+# Also patch custom_adapter.py on disk if it has bare transformers imports
+# (belt-and-suspenders — covers cases where start.sh wasn't used)
+try:
+    import re as _re
+    _ca_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai-toolkit", "toolkit", "custom_adapter.py")
+    if os.path.isfile(_ca_path):
+        with open(_ca_path) as _f:
+            _ca_lines = _f.readlines()
+        _ca_patched = 0
+        _i = 0
+        while _i < len(_ca_lines):
+            _s = _ca_lines[_i].strip()
+            _wrapped = (_i > 0 and _ca_lines[_i-1].strip() == "try:")
+            if _s.startswith("from transformers import") and not _wrapped:
+                _m = _re.match(r"from transformers import (.+)", _s)
+                if _m:
+                    _indent = _ca_lines[_i][:len(_ca_lines[_i]) - len(_ca_lines[_i].lstrip())]
+                    _names = [n.strip() for n in _m.group(1).split(",")]
+                    _block = [_indent + "try:\n", _indent + "    " + _s + "\n", _indent + "except ImportError:\n"]
+                    for _n in _names:
+                        _block.append(_indent + "    " + _n + " = None\n")
+                    _ca_lines[_i:_i+1] = _block
+                    _ca_patched += 1
+                    _i += len(_block)
+                    continue
+            _i += 1
+        if _ca_patched:
+            with open(_ca_path, "w") as _f:
+                _f.writelines(_ca_lines)
 except Exception:
     pass
 
