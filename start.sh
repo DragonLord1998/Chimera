@@ -44,50 +44,35 @@ pip install --break-system-packages --no-cache-dir --force-reinstall scipy || tr
 
 # Patch AI Toolkit for transformers 5.x: ViTHybrid classes removed
 if [ -f "ai-toolkit/toolkit/custom_adapter.py" ]; then
+    # Reset to clean git state first to undo any prior broken patches
+    (cd ai-toolkit && git checkout -- toolkit/custom_adapter.py) 2>/dev/null
+
+    # Now patch the clean file
     python3 -c "
 p = 'ai-toolkit/toolkit/custom_adapter.py'
 with open(p) as f:
-    lines = f.readlines()
+    c = f.read()
 
-target = 'from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification'
-correct = [
-    'try:\n',
-    '    ' + target + '\n',
-    'except ImportError:\n',
-    '    ViTHybridImageProcessor = None\n',
-    '    ViTHybridForImageClassification = None\n',
-]
+old = 'from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification'
+new = '''try:
+    from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification
+except ImportError:
+    ViTHybridImageProcessor = None
+    ViTHybridForImageClassification = None'''
 
-content = ''.join(lines)
-# Already correctly patched (and no stray try: above)
-correct_block = 'try:\n    ' + target + '\nexcept ImportError:\n    ViTHybridImageProcessor = None'
-if correct_block in content and 'try:\ntry:' not in content:
-    print('[Chimera] AI Toolkit ViTHybrid: already patched')
-elif target not in content:
-    print('[Chimera] AI Toolkit ViTHybrid: import line not found')
-else:
-    # Find the import line (any indentation level)
-    idx = next(i for i, l in enumerate(lines) if target in l)
-
-    # Remove any broken try: lines stacked above
-    start = idx
-    while start > 0 and lines[start - 1].strip() in ('try:', ''):
-        start -= 1
-
-    # Remove any broken except/assignment lines below
-    end = idx + 1
-    while end < len(lines):
-        s = lines[end].strip()
-        if s.startswith('except') or s.startswith('ViTHybrid') or s == '':
-            end += 1
-        else:
-            break
-
-    lines[start:end] = correct
+if old in c:
+    c = c.replace(old, new)
     with open(p, 'w') as f:
-        f.writelines(lines)
+        f.write(c)
     print('[Chimera] Patched AI Toolkit: ViTHybrid import')
+else:
+    print('[Chimera] AI Toolkit ViTHybrid: import line not found (already patched or removed)')
 " || true
+
+    # Verify syntax
+    if ! python3 -c "import py_compile; py_compile.compile('ai-toolkit/toolkit/custom_adapter.py', doraise=True)" 2>/dev/null; then
+        echo "[Chimera] WARNING: custom_adapter.py still has syntax errors after patching"
+    fi
 fi
 
 # Verify critical import
