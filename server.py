@@ -142,7 +142,9 @@ try:
         "ViTHybridImageProcessor", "ViTHybridForImageClassification",
         "ViTFeatureExtractor", "ViTForImageClassification",
     ):
-        if not hasattr(_tf, _cls_name):
+        try:
+            getattr(_tf, _cls_name)
+        except (AttributeError, ImportError):
             setattr(_tf, _cls_name, type(_cls_name, (), {}))
 except Exception:
     pass
