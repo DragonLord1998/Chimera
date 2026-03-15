@@ -155,13 +155,43 @@ import datetime
 import gc
 import json
 import queue
+import re as _re
 import sys
 import threading
 import time
 import uuid
+import zipfile as _zipfile
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, request, send_file, send_from_directory
+from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
+
+
+# ---------------------------------------------------------------------------
+# Security helpers
+# ---------------------------------------------------------------------------
+
+_SAFE_ID_RE = _re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _validate_job_id(job_id: str) -> str:
+    """Validate that a job_id is a safe directory name (no path traversal)."""
+    if not job_id or not _SAFE_ID_RE.match(job_id):
+        abort(400, description="Invalid job ID")
+    return job_id
+
+
+def _safe_extract_zip(zip_path: str, dest_dir: str) -> None:
+    """Extract a ZIP file safely, rejecting members with path traversal."""
+    dest = os.path.realpath(dest_dir)
+    with _zipfile.ZipFile(zip_path, "r") as zf:
+        for member in zf.infolist():
+            # Reject absolute paths and parent directory references
+            if member.filename.startswith("/") or ".." in member.filename:
+                raise ValueError(f"Unsafe path in ZIP: {member.filename}")
+            target = os.path.realpath(os.path.join(dest, member.filename))
+            if not target.startswith(dest + os.sep) and target != dest:
+                raise ValueError(f"ZIP path escapes target: {member.filename}")
+            zf.extract(member, dest)
 
 app = Flask(__name__, static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500 MB upload limit
@@ -209,17 +239,33 @@ def start_pipeline():
     has_image = image_file is not None and image_file.filename
 
     # Collect params (all optional with defaults)
+    try:
+        num_images = max(1, min(100, int(request.form.get("num_images", 25))))
+        lora_rank = max(4, min(128, int(request.form.get("lora_rank", 32))))
+        lora_steps = max(100, min(10000, int(request.form.get("lora_steps", 1500))))
+        learning_rate = max(1e-6, min(1e-2, float(request.form.get("learning_rate", 1e-4))))
+        inference_steps = max(1, min(200, int(request.form.get("inference_steps", 50))))
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": f"Invalid numeric parameter: {e}"}), 400
+
+    base_model = request.form.get("base_model", "zimage").strip()
+    if base_model not in ("zimage", "flux_krea"):
+        return jsonify({"error": "Invalid base_model"}), 400
+    synthesizer = request.form.get("synthesizer", "flux2_dev").strip()
+    if synthesizer not in ("flux2_dev", "klein_kv"):
+        return jsonify({"error": "Invalid synthesizer"}), 400
+
     params = {
         "trigger_word": request.form.get("trigger_word", "chrx").strip() or "chrx",
         "gemini_key": request.form.get("gemini_key", "").strip(),
         "hf_token": request.form.get("hf_token", "").strip() or None,
-        "num_images": int(request.form.get("num_images", 25)),
-        "lora_rank": int(request.form.get("lora_rank", 32)),
-        "lora_steps": int(request.form.get("lora_steps", 1500)),
-        "learning_rate": float(request.form.get("learning_rate", 1e-4)),
-        "inference_steps": int(request.form.get("inference_steps", 50)),
-        "base_model": request.form.get("base_model", "zimage").strip(),
-        "synthesizer": request.form.get("synthesizer", "flux2_dev").strip(),
+        "num_images": num_images,
+        "lora_rank": lora_rank,
+        "lora_steps": lora_steps,
+        "learning_rate": learning_rate,
+        "inference_steps": inference_steps,
+        "base_model": base_model,
+        "synthesizer": synthesizer,
         "sample_prompts": None,
     }
 
@@ -241,6 +287,8 @@ def start_pipeline():
 
     # Existing dataset from a previous job on the server
     existing_dataset_id = request.form.get("existing_dataset", "").strip() or None
+    if existing_dataset_id and not _SAFE_ID_RE.match(existing_dataset_id):
+        return jsonify({"error": "Invalid dataset ID"}), 400
 
     if not has_image and not has_views_zip and not has_dataset_zip and not existing_dataset_id:
         return jsonify({"error": "Upload a character image, views zip, dataset zip, or select an existing dataset"}), 400
@@ -248,15 +296,24 @@ def start_pipeline():
     if not has_views_zip and not has_dataset_zip and not existing_dataset_id and not params["gemini_key"]:
         return jsonify({"error": "Gemini API key is required (or upload a views/dataset zip, or select an existing dataset)"}), 400
 
+    # Prevent concurrent jobs
+    with _jobs_lock:
+        for jid, j in _jobs.items():
+            if j["status"] == "running":
+                return jsonify({"error": f"A job is already running ({jid}). Wait for it to finish or restart the server."}), 409
+
     # Create job
     job_id = str(uuid.uuid4())[:12]
     job_dir = os.path.join(JOBS_DIR, job_id)
     os.makedirs(job_dir, exist_ok=True)
 
     # Save uploaded image (optional when views zip is provided)
+    _ALLOWED_IMG_EXT = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
     image_path = None
     if has_image:
-        ext = os.path.splitext(image_file.filename)[1] or ".png"
+        ext = os.path.splitext(image_file.filename)[1].lower()
+        if ext not in _ALLOWED_IMG_EXT:
+            return jsonify({"error": f"Unsupported image format: {ext}"}), 400
         image_path = os.path.join(job_dir, f"input{ext}")
         image_file.save(image_path)
 
@@ -374,7 +431,11 @@ def active_job():
 
 @app.route("/api/images/<job_id>/<path:subpath>")
 def serve_image(job_id: str, subpath: str):
-    job_base = os.path.join(JOBS_DIR, job_id)
+    _validate_job_id(job_id)
+    job_base = os.path.realpath(os.path.join(JOBS_DIR, job_id))
+    jobs_root = os.path.realpath(JOBS_DIR)
+    if not job_base.startswith(jobs_root + os.sep):
+        abort(403)
     return send_from_directory(job_base, subpath)
 
 
@@ -385,6 +446,7 @@ def serve_image(job_id: str, subpath: str):
 
 @app.route("/api/download/<job_id>")
 def download_lora(job_id: str):
+    _validate_job_id(job_id)
     with _jobs_lock:
         job = _jobs.get(job_id)
     if not job:
@@ -406,6 +468,7 @@ def download_lora(job_id: str):
 @app.route("/api/download-checkpoint/<job_id>/<int:step>")
 def download_checkpoint(job_id: str, step: int):
     """Download the checkpoint .safetensors closest to the given step."""
+    _validate_job_id(job_id)
     with _jobs_lock:
         job = _jobs.get(job_id)
 
@@ -451,7 +514,7 @@ def download_checkpoint(job_id: str, step: int):
 
 @app.route("/api/download-views/<job_id>")
 def download_views(job_id: str):
-    import zipfile
+    _validate_job_id(job_id)
     import io
 
     stage1_dir = os.path.join(JOBS_DIR, job_id, "stage1")
@@ -464,7 +527,7 @@ def download_views(job_id: str):
         return jsonify({"error": "No view images found"}), 404
 
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+    with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as zf:
         for fname in sorted(images):
             zf.write(os.path.join(stage1_dir, fname), fname)
     buf.seek(0)
@@ -483,7 +546,7 @@ def download_views(job_id: str):
 
 @app.route("/api/download-dataset/<job_id>")
 def download_dataset(job_id: str):
-    import zipfile
+    _validate_job_id(job_id)
     import io
 
     dataset_dir = os.path.join(JOBS_DIR, job_id, "dataset")
@@ -496,7 +559,7 @@ def download_dataset(job_id: str):
         return jsonify({"error": "No dataset files found"}), 404
 
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+    with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as zf:
         for fname in sorted(files):
             zf.write(os.path.join(dataset_dir, fname), fname)
     buf.seek(0)
@@ -589,7 +652,7 @@ def _run_pipeline(
         for d in (stage1_dir, dataset_dir, output_dir):
             os.makedirs(d, exist_ok=True)
 
-        trigger = params["trigger_word"]
+        trigger = _re.sub(r'[^a-zA-Z0-9_]', '', params["trigger_word"]) or "chrx"
         output_name = f"{trigger}_lora"
 
         # ------------------------------------------------------------------
@@ -660,10 +723,8 @@ def _run_pipeline(
         # Fast path: dataset ZIP provided — skip stages 1 and 2
         # ------------------------------------------------------------------
         elif dataset_zip_path and os.path.isfile(dataset_zip_path):
-            import zipfile
             stage_msg(2, "Extracting uploaded dataset...")
-            with zipfile.ZipFile(dataset_zip_path, "r") as zf:
-                zf.extractall(dataset_dir)
+            _safe_extract_zip(dataset_zip_path, dataset_dir)
 
             # Count extracted images for UI
             dataset_imgs = sorted([
@@ -732,10 +793,8 @@ def _run_pipeline(
             view_names = ["left", "front", "right", "face", "back"]
 
             if views_zip_path and os.path.isfile(views_zip_path):
-                import zipfile
                 stage_msg(1, "Extracting uploaded multi-view images...")
-                with zipfile.ZipFile(views_zip_path, "r") as zf:
-                    zf.extractall(stage1_dir)
+                _safe_extract_zip(views_zip_path, stage1_dir)
 
                 # Find view images — accept left/front/right.png or any 3 images
                 for vn in view_names:
@@ -1062,6 +1121,7 @@ def _run_pipeline(
                 rank=params["lora_rank"],
                 learning_rate=params["learning_rate"],
                 steps=total_steps,
+                resolution=2048,
                 save_every=save_every,
                 sample_every=save_every,
                 sample_prompts=params["sample_prompts"],
@@ -1097,7 +1157,11 @@ def _run_pipeline(
         import traceback
         tb = traceback.format_exc()
         print(f"[server] Pipeline error for job {job_id}:\n{tb}", file=sys.stderr)
-        emit("error", {"message": str(exc)})
+        # Sanitize error: strip internal paths, truncate
+        safe_msg = _re.sub(r'/[\w/.\\-]+', '[path]', str(exc))
+        if len(safe_msg) > 300:
+            safe_msg = safe_msg[:300] + "..."
+        emit("error", {"message": safe_msg})
 
         with _jobs_lock:
             if job_id in _jobs:
@@ -1130,9 +1194,16 @@ def _find_lora(job_dir: str) -> str | None:
 # Entrypoint
 # ---------------------------------------------------------------------------
 
+@app.after_request
+def _security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 7860))
-    debug = os.environ.get("DEBUG", "0") == "1"
     print(f"[server] Starting Chimera on http://0.0.0.0:{port}")
     # threaded=True is required for SSE + concurrent requests
-    app.run(host="0.0.0.0", port=port, debug=debug, threaded=True)
+    # debug is always False on public bind — Werkzeug debugger = RCE
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)

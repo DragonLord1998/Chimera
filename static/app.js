@@ -20,6 +20,16 @@ function activateSection(id) {
   if (el) el.classList.add("active");
 }
 
+function revokeBlobUrls(container) {
+  if (!container) return;
+  const imgs = container.querySelectorAll ? container.querySelectorAll("img") : [];
+  for (const img of imgs) {
+    if (img.src && img.src.startsWith("blob:")) {
+      URL.revokeObjectURL(img.src);
+    }
+  }
+}
+
 function resetViewPlaceholders() {
   const slots = [
     { id: "viewLeft",  icon: "L",  label: "Left Side Fullbody" },
@@ -31,6 +41,7 @@ function resetViewPlaceholders() {
   for (const slot of slots) {
     const el = document.getElementById(slot.id);
     if (!el) continue;
+    revokeBlobUrls(el);
     el.classList.remove("loaded");
     el.innerHTML = `<div class="placeholder-inner"><div class="placeholder-icon">${slot.icon}</div><span>${slot.label}</span></div>`;
   }
@@ -42,6 +53,7 @@ function resetViewPlaceholders() {
 
 function initSyntheticGrid(count) {
   const grid = document.getElementById("syntheticGrid");
+  revokeBlobUrls(grid);
   grid.innerHTML = "";
   for (let i = 0; i < count; i++) {
     const cell = document.createElement("div");
@@ -258,30 +270,55 @@ function openComparison(originalUrl, upscaledUrl) {
   const overlay = document.createElement("div");
   overlay.id = "comparisonOverlay";
   overlay.className = "comparison-overlay";
-  overlay.innerHTML = `
-    <div class="comparison-container">
-      <div class="comparison-close">&times;</div>
-      <div class="comparison-labels">
-        <span class="comparison-label-left">Original 1024px</span>
-        <span class="comparison-label-right">SeedVR2 2048px</span>
-      </div>
-      <div class="comparison-wrapper">
-        <img class="comparison-img comparison-img-upscaled" src="${upscaledUrl}" alt="upscaled" />
-        <div class="comparison-clip">
-          <img class="comparison-img comparison-img-original" src="${originalUrl}" alt="original" />
-        </div>
-        <div class="comparison-slider">
-          <div class="comparison-handle"></div>
-        </div>
-      </div>
-    </div>
-  `;
 
+  const container = document.createElement("div");
+  container.className = "comparison-container";
+
+  const closeBtn = document.createElement("div");
+  closeBtn.className = "comparison-close";
+  closeBtn.textContent = "\u00d7";
+  container.appendChild(closeBtn);
+
+  const labels = document.createElement("div");
+  labels.className = "comparison-labels";
+  const labelLeft = document.createElement("span");
+  labelLeft.className = "comparison-label-left";
+  labelLeft.textContent = "Original 1024px";
+  const labelRight = document.createElement("span");
+  labelRight.className = "comparison-label-right";
+  labelRight.textContent = "SeedVR2 2048px";
+  labels.appendChild(labelLeft);
+  labels.appendChild(labelRight);
+  container.appendChild(labels);
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "comparison-wrapper";
+
+  const imgUpscaled = document.createElement("img");
+  imgUpscaled.className = "comparison-img comparison-img-upscaled";
+  imgUpscaled.src = upscaledUrl;
+  imgUpscaled.alt = "upscaled";
+  wrapper.appendChild(imgUpscaled);
+
+  const clip = document.createElement("div");
+  clip.className = "comparison-clip";
+  const imgOriginal = document.createElement("img");
+  imgOriginal.className = "comparison-img comparison-img-original";
+  imgOriginal.src = originalUrl;
+  imgOriginal.alt = "original";
+  clip.appendChild(imgOriginal);
+  wrapper.appendChild(clip);
+
+  const slider = document.createElement("div");
+  slider.className = "comparison-slider";
+  const handle = document.createElement("div");
+  handle.className = "comparison-handle";
+  slider.appendChild(handle);
+  wrapper.appendChild(slider);
+
+  container.appendChild(wrapper);
+  overlay.appendChild(container);
   document.body.appendChild(overlay);
-
-  const wrapper = overlay.querySelector(".comparison-wrapper");
-  const clip = overlay.querySelector(".comparison-clip");
-  const slider = overlay.querySelector(".comparison-slider");
 
   function updateSlider(x) {
     const rect = wrapper.getBoundingClientRect();
@@ -297,8 +334,16 @@ function openComparison(originalUrl, upscaledUrl) {
   }, 50);
 
   let dragging = false;
+
+  // Use named handlers so we can remove window listeners on cleanup
+  function onMouseUp() { dragging = false; }
+  function cleanup() {
+    window.removeEventListener("mouseup", onMouseUp);
+    overlay.remove();
+  }
+
   wrapper.addEventListener("mousedown", () => { dragging = true; });
-  window.addEventListener("mouseup", () => { dragging = false; });
+  window.addEventListener("mouseup", onMouseUp);
   wrapper.addEventListener("mousemove", e => { if (dragging) updateSlider(e.clientX); });
   wrapper.addEventListener("click", e => updateSlider(e.clientX));
 
@@ -309,9 +354,9 @@ function openComparison(originalUrl, upscaledUrl) {
     if (dragging) updateSlider(e.touches[0].clientX);
   });
 
-  // Close
-  overlay.querySelector(".comparison-close").addEventListener("click", () => overlay.remove());
-  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  // Close — cleanup window listeners to prevent memory leak
+  closeBtn.addEventListener("click", cleanup);
+  overlay.addEventListener("click", e => { if (e.target === overlay) cleanup(); });
 }
 
 function onCompleteEvent(data, evtSource, startBtn) {

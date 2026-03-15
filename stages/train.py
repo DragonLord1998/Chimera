@@ -203,8 +203,9 @@ class LoRATrainer:
         """
         try:
             import torch
-            torch.cuda.empty_cache()
-            print("[Chimera] LoRATrainer: CUDA cache cleared.")
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                print("[Chimera] LoRATrainer: CUDA cache cleared.")
         except Exception as exc:
             print(
                 f"[Chimera] LoRATrainer: WARNING — could not clear "
