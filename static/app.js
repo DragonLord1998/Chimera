@@ -992,14 +992,27 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === "Escape" && settingsPanel.classList.contains("open")) closePanel();
   });
 
-  // ---- Trigger word live preview ----
-  const triggerInput   = document.getElementById("triggerWord");
-  const previewTrigger = document.getElementById("previewTrigger");
-  if (triggerInput && previewTrigger) {
-    triggerInput.addEventListener("input", () => {
-      previewTrigger.textContent = triggerInput.value || "chrx";
-    });
+  // ---- Trigger word + sample prompt live preview ----
+  const triggerInput      = document.getElementById("triggerWord");
+  const previewTrigger    = document.getElementById("previewTrigger");
+  const livePreviewPrompt = document.getElementById("livePreviewPrompt");
+  const samplePromptsArea = document.getElementById("samplePrompts");
+
+  function updatePreviewPrompt() {
+    if (!livePreviewPrompt) return;
+    const tw = (triggerInput && triggerInput.value) || "chrx";
+    const raw = samplePromptsArea ? samplePromptsArea.value.trim() : "";
+    const firstLine = raw.split("\n").find(l => l.trim()) || "";
+    if (firstLine) {
+      const prompt = firstLine.trim().replace(/TRIGGER/g, `<span class="trigger-highlight">${tw}</span>`);
+      livePreviewPrompt.innerHTML = prompt;
+    } else {
+      livePreviewPrompt.innerHTML = `a portrait of <span class="trigger-highlight">${tw}</span>, looking at the camera, studio lighting`;
+    }
   }
+
+  if (triggerInput) triggerInput.addEventListener("input", updatePreviewPrompt);
+  if (samplePromptsArea) samplePromptsArea.addEventListener("input", updatePreviewPrompt);
 
   // Init grid with default 25 placeholders
   initSyntheticGrid(25);

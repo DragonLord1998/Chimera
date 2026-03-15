@@ -1080,7 +1080,7 @@ def _run_pipeline(
                     batch_size=params.get("batch_size", 1),
                     save_every=first_pass_steps,  # only save final
                     sample_every=100,
-                    sample_prompts=None,  # use default trigger-word prompts
+                    sample_prompts=[params["sample_prompts"][0]] if params.get("sample_prompts") else None,
                 )
             finally:
                 sys.stderr = _fp_real_stderr
