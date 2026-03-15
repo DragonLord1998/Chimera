@@ -134,7 +134,8 @@ except Exception:
     pass
 
 # Stub classes removed in transformers 5.x — AI Toolkit imports them but
-# they are not needed for LoRA training.
+# they are not needed for LoRA training. The stubs make "from transformers
+# import X" succeed without patching files on disk.
 try:
     import transformers as _tf
     for _cls_name in (
@@ -146,35 +147,14 @@ try:
 except Exception:
     pass
 
-# Also patch custom_adapter.py on disk if it has bare transformers imports
-# (belt-and-suspenders — covers cases where start.sh wasn't used)
+# Reset custom_adapter.py to clean upstream state (undo any broken patches).
+# The runtime stubs above make the imports succeed without file patching.
 try:
-    import re as _re
-    _ca_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai-toolkit", "toolkit", "custom_adapter.py")
-    if os.path.isfile(_ca_path):
-        with open(_ca_path) as _f:
-            _ca_lines = _f.readlines()
-        _ca_patched = 0
-        _i = 0
-        while _i < len(_ca_lines):
-            _s = _ca_lines[_i].strip()
-            _wrapped = (_i > 0 and _ca_lines[_i-1].strip() == "try:")
-            if _s.startswith("from transformers import") and not _wrapped:
-                _m = _re.match(r"from transformers import (.+)", _s)
-                if _m:
-                    _indent = _ca_lines[_i][:len(_ca_lines[_i]) - len(_ca_lines[_i].lstrip())]
-                    _names = [n.strip() for n in _m.group(1).split(",")]
-                    _block = [_indent + "try:\n", _indent + "    " + _s + "\n", _indent + "except ImportError:\n"]
-                    for _n in _names:
-                        _block.append(_indent + "    " + _n + " = None\n")
-                    _ca_lines[_i:_i+1] = _block
-                    _ca_patched += 1
-                    _i += len(_block)
-                    continue
-            _i += 1
-        if _ca_patched:
-            with open(_ca_path, "w") as _f:
-                _f.writelines(_ca_lines)
+    import subprocess as _sp
+    _aitk = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ai-toolkit")
+    if os.path.isdir(os.path.join(_aitk, ".git")):
+        _sp.run(["git", "checkout", "--", "toolkit/custom_adapter.py"],
+                cwd=_aitk, capture_output=True, timeout=5)
 except Exception:
     pass
 
