@@ -1076,11 +1076,11 @@ def _run_pipeline(
                     rank=first_pass_rank,
                     learning_rate=params["learning_rate"],
                     steps=first_pass_steps,
-                    resolution=2048,
+                    resolution=1024,
                     batch_size=params.get("batch_size", 1),
                     save_every=first_pass_steps,  # only save final
-                    sample_every=99999,  # skip samples for speed
-                    sample_prompts=["skip"],
+                    sample_every=100,
+                    sample_prompts=None,  # use default trigger-word prompts
                 )
             finally:
                 sys.stderr = _fp_real_stderr

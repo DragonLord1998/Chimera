@@ -358,10 +358,11 @@ class LoRATrainer:
         if self.base_model == "flux_dev":
             # FLUX.1-dev — used for first-pass LoRA training in enhanced mode.
             # Downloads from HF Hub via repo ID (gated, requires HF_TOKEN).
+            # Quantize transformer to fp8 for faster training (~2x speedup).
             return {
                 "name_or_path": self.model_path,
                 "is_flux": True,
-                "quantize": False,
+                "quantize": True,
             }
         if self.base_model == "flux_krea":
             return {

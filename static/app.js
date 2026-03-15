@@ -298,6 +298,22 @@ function onProgressEvent(data) {
 
 function onCheckpointEvent(data) {
   addCheckpointRow(data.step, data.images, data.download_url || null);
+
+  // Update live preview with the first sample image
+  if (data.images && data.images.length > 0) {
+    const livePreview = document.getElementById("livePreviewImg");
+    if (livePreview) {
+      let img = livePreview.querySelector("img");
+      if (!img) {
+        livePreview.textContent = "";
+        img = document.createElement("img");
+        img.alt = "checkpoint sample";
+        livePreview.appendChild(img);
+      }
+      img.src = data.images[0];
+      livePreview.title = `Step ${data.step.toLocaleString()}`;
+    }
+  }
 }
 
 function onDiffusionPreview(data) {
@@ -1126,6 +1142,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Reset checkpoint container
     document.getElementById("checkpointContainer").innerHTML = "";
+
+    // Reset live preview
+    const livePreviewReset = document.getElementById("livePreviewImg");
+    if (livePreviewReset) { livePreviewReset.textContent = "Step 0"; livePreviewReset.title = ""; }
 
     // Hide output section and download buttons
     document.getElementById("outputSection").hidden = true;
