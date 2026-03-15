@@ -232,11 +232,14 @@ def start_pipeline():
     dataset_zip = request.files.get("dataset_zip")
     has_dataset_zip = dataset_zip is not None and dataset_zip.filename
 
-    if not has_image and not has_views_zip and not has_dataset_zip:
-        return jsonify({"error": "Upload a character image, views zip, or dataset zip"}), 400
+    # Existing dataset from a previous job on the server
+    existing_dataset_id = request.form.get("existing_dataset", "").strip() or None
 
-    if not has_views_zip and not has_dataset_zip and not params["gemini_key"]:
-        return jsonify({"error": "Gemini API key is required (or upload a views/dataset zip)"}), 400
+    if not has_image and not has_views_zip and not has_dataset_zip and not existing_dataset_id:
+        return jsonify({"error": "Upload a character image, views zip, dataset zip, or select an existing dataset"}), 400
+
+    if not has_views_zip and not has_dataset_zip and not existing_dataset_id and not params["gemini_key"]:
+        return jsonify({"error": "Gemini API key is required (or upload a views/dataset zip, or select an existing dataset)"}), 400
 
     # Create job
     job_id = str(uuid.uuid4())[:12]
@@ -280,7 +283,7 @@ def start_pipeline():
     # Launch pipeline in background thread
     thread = threading.Thread(
         target=_run_pipeline,
-        args=(job_id, image_path, job_dir, params, views_zip_path, dataset_zip_path),
+        args=(job_id, image_path, job_dir, params, views_zip_path, dataset_zip_path, existing_dataset_id),
         daemon=True,
         name=f"pipeline-{job_id}",
     )
@@ -458,6 +461,48 @@ def download_dataset(job_id: str):
 
 
 # ---------------------------------------------------------------------------
+# API: list existing datasets on the server
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/datasets")
+def list_datasets():
+    """Scan JOBS_DIR for previous jobs that have a dataset/ folder with images."""
+    datasets = []
+    if not os.path.isdir(JOBS_DIR):
+        return jsonify({"datasets": []})
+
+    for entry in os.listdir(JOBS_DIR):
+        job_dir = os.path.join(JOBS_DIR, entry)
+        dataset_dir = os.path.join(job_dir, "dataset")
+        if not os.path.isdir(dataset_dir):
+            continue
+
+        images = sorted([
+            f for f in os.listdir(dataset_dir)
+            if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+        ])
+        if not images:
+            continue
+
+        captions = [f for f in os.listdir(dataset_dir) if f.lower().endswith(".txt")]
+        mtime = os.path.getmtime(dataset_dir)
+        has_lora = bool(_find_lora(job_dir))
+
+        datasets.append({
+            "job_id": entry,
+            "image_count": len(images),
+            "has_captions": len(captions) >= len(images),
+            "has_lora": has_lora,
+            "thumbnail": f"/api/images/{entry}/dataset/{images[0]}",
+            "created": datetime.datetime.fromtimestamp(mtime).isoformat(),
+        })
+
+    datasets.sort(key=lambda d: d["created"], reverse=True)
+    return jsonify({"datasets": datasets})
+
+
+# ---------------------------------------------------------------------------
 # Pipeline background thread
 # ---------------------------------------------------------------------------
 
@@ -469,6 +514,7 @@ def _run_pipeline(
     params: dict,
     views_zip_path: str | None = None,
     dataset_zip_path: str | None = None,
+    existing_dataset_id: str | None = None,
 ) -> None:
     """Full pipeline: model check → multi-view → synthesize → caption → train."""
 
@@ -525,9 +571,47 @@ def _run_pipeline(
                 mm._download_with_retry("flux2_klein_kv")
 
         # ------------------------------------------------------------------
+        # Fast path: existing dataset from a previous job — symlink, skip to training
+        # ------------------------------------------------------------------
+        if existing_dataset_id:
+            existing_dir = os.path.join(JOBS_DIR, existing_dataset_id, "dataset")
+            if not os.path.isdir(existing_dir):
+                raise RuntimeError(f"Dataset not found for job {existing_dataset_id}")
+
+            stage_msg(2, "Loading existing dataset...")
+            for fname in os.listdir(existing_dir):
+                src = os.path.join(existing_dir, fname)
+                dst = os.path.join(dataset_dir, fname)
+                if os.path.isfile(src) and not os.path.exists(dst):
+                    os.symlink(src, dst)
+
+            # Link _originals subdir for comparison slider
+            originals_src = os.path.join(existing_dir, "_originals")
+            originals_dst = os.path.join(dataset_dir, "_originals")
+            if os.path.isdir(originals_src) and not os.path.exists(originals_dst):
+                os.symlink(originals_src, originals_dst)
+
+            dataset_imgs = sorted([
+                f for f in os.listdir(dataset_dir)
+                if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
+            ])
+            for i, fname in enumerate(dataset_imgs):
+                emit("synthetic", {
+                    "index": i,
+                    "url": f"/api/images/{job_id}/dataset/{fname}",
+                })
+
+            # Update job params with actual image count for UI reconnect
+            with _jobs_lock:
+                if job_id in _jobs:
+                    _jobs[job_id]["params"]["num_images"] = len(dataset_imgs)
+
+            stage_msg(2, f"Dataset loaded — {len(dataset_imgs)} images from previous run.")
+
+        # ------------------------------------------------------------------
         # Fast path: dataset ZIP provided — skip stages 1 and 2
         # ------------------------------------------------------------------
-        if dataset_zip_path and os.path.isfile(dataset_zip_path):
+        elif dataset_zip_path and os.path.isfile(dataset_zip_path):
             import zipfile
             stage_msg(2, "Extracting uploaded dataset...")
             with zipfile.ZipFile(dataset_zip_path, "r") as zf:

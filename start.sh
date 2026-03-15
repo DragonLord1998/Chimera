@@ -45,38 +45,48 @@ pip install --break-system-packages --no-cache-dir --force-reinstall scipy || tr
 # Patch AI Toolkit for transformers 5.x: ViTHybrid classes removed
 if [ -f "ai-toolkit/toolkit/custom_adapter.py" ]; then
     python3 -c "
-import re
-
 p = 'ai-toolkit/toolkit/custom_adapter.py'
 with open(p) as f:
-    c = f.read()
+    lines = f.readlines()
 
 target = 'from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification'
-replacement = '''try:
-    from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification
-except ImportError:
-    ViTHybridImageProcessor = None
-    ViTHybridForImageClassification = None'''
+correct = [
+    'try:\n',
+    '    ' + target + '\n',
+    'except ImportError:\n',
+    '    ViTHybridImageProcessor = None\n',
+    '    ViTHybridForImageClassification = None\n',
+]
 
-# Already correctly patched
-if 'try:\n    ' + target in c and 'except ImportError' in c:
+content = ''.join(lines)
+# Already correctly patched (and no stray try: above)
+correct_block = 'try:\n    ' + target + '\nexcept ImportError:\n    ViTHybridImageProcessor = None'
+if correct_block in content and 'try:\ntry:' not in content:
     print('[Chimera] AI Toolkit ViTHybrid: already patched')
+elif target not in content:
+    print('[Chimera] AI Toolkit ViTHybrid: import line not found')
 else:
-    # Fix broken state: try: exists but import not indented, or missing except
-    broken = re.compile(r'try:\s*\n\s*' + re.escape(target) + r'(\s*\n(?!except).*)*', re.MULTILINE)
-    if broken.search(c):
-        c = broken.sub(replacement, c)
-        with open(p, 'w') as f:
-            f.write(c)
-        print('[Chimera] Patched AI Toolkit: fixed broken ViTHybrid try/except')
-    # Original unpatched: bare import line
-    elif target in c:
-        c = c.replace(target, replacement)
-        with open(p, 'w') as f:
-            f.write(c)
-        print('[Chimera] Patched AI Toolkit: ViTHybrid import')
-    else:
-        print('[Chimera] AI Toolkit ViTHybrid: import line not found')
+    # Find the import line (any indentation level)
+    idx = next(i for i, l in enumerate(lines) if target in l)
+
+    # Remove any broken try: lines stacked above
+    start = idx
+    while start > 0 and lines[start - 1].strip() in ('try:', ''):
+        start -= 1
+
+    # Remove any broken except/assignment lines below
+    end = idx + 1
+    while end < len(lines):
+        s = lines[end].strip()
+        if s.startswith('except') or s.startswith('ViTHybrid') or s == '':
+            end += 1
+        else:
+            break
+
+    lines[start:end] = correct
+    with open(p, 'w') as f:
+        f.writelines(lines)
+    print('[Chimera] Patched AI Toolkit: ViTHybrid import')
 " || true
 fi
 

@@ -502,6 +502,8 @@ document.addEventListener("DOMContentLoaded", () => {
     datasetZipFile = file;
     datasetZipName.textContent = file.name;
     datasetZipClear.hidden = false;
+    // Clear server dataset selection (mutually exclusive)
+    document.getElementById("existingDataset").value = "";
   });
 
   datasetZipClear.addEventListener("click", () => {
@@ -509,6 +511,55 @@ document.addEventListener("DOMContentLoaded", () => {
     datasetZipName.textContent = "";
     datasetZipClear.hidden = true;
     datasetZipInput.value = "";
+  });
+
+  // Existing dataset selector
+  const existingDataset = document.getElementById("existingDataset");
+  const refreshDatasets = document.getElementById("refreshDatasets");
+
+  async function fetchDatasets() {
+    try {
+      existingDataset.disabled = true;
+      refreshDatasets.disabled = true;
+      const resp = await fetch("/api/datasets");
+      const data = await resp.json();
+      existingDataset.innerHTML = '<option value="">Select from server...</option>';
+      if (data.datasets && data.datasets.length > 0) {
+        for (const ds of data.datasets) {
+          const opt = document.createElement("option");
+          opt.value = ds.job_id;
+          opt.dataset.count = ds.image_count;
+          const date = new Date(ds.created).toLocaleDateString();
+          const lora = ds.has_lora ? " \u2713" : "";
+          opt.textContent = `${ds.job_id} \u2014 ${ds.image_count} imgs (${date})${lora}`;
+          existingDataset.appendChild(opt);
+        }
+      } else {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.disabled = true;
+        opt.textContent = "No datasets found on server";
+        existingDataset.appendChild(opt);
+      }
+    } catch (err) {
+      console.log("[datasets] Could not fetch:", err.message);
+    } finally {
+      existingDataset.disabled = false;
+      refreshDatasets.disabled = false;
+    }
+  }
+
+  fetchDatasets();
+  refreshDatasets.addEventListener("click", () => fetchDatasets());
+
+  existingDataset.addEventListener("change", () => {
+    if (existingDataset.value) {
+      // Clear zip selection (mutually exclusive)
+      datasetZipFile = null;
+      datasetZipName.textContent = "";
+      datasetZipClear.hidden = true;
+      datasetZipInput.value = "";
+    }
   });
 
   // Init grid with default 25 placeholders
@@ -576,20 +627,25 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------------------------------------------------------------------------
 
   startBtn.addEventListener("click", async () => {
-    if (!uploadedFile && !viewsZipFile && !datasetZipFile) {
-      alert("Please upload a character image, views zip, or dataset zip.");
+    const selectedDatasetId = document.getElementById("existingDataset").value;
+    if (!uploadedFile && !viewsZipFile && !datasetZipFile && !selectedDatasetId) {
+      alert("Please upload a character image, views zip, dataset zip, or select an existing dataset.");
       return;
     }
 
     const geminiKey = document.getElementById("geminiKey").value.trim();
-    if (!geminiKey && !viewsZipFile && !datasetZipFile) {
+    if (!geminiKey && !viewsZipFile && !datasetZipFile && !selectedDatasetId) {
       alert("Please enter your Gemini API key, or upload a views/dataset zip to skip generation.");
       document.getElementById("geminiKey").focus();
       return;
     }
 
-    // Reset UI state
-    const numImages = parseInt(document.getElementById("numImages").value, 10) || 25;
+    // Reset UI state — use existing dataset image count if selected
+    let numImages = parseInt(document.getElementById("numImages").value, 10) || 25;
+    if (selectedDatasetId) {
+      const opt = document.getElementById("existingDataset").selectedOptions[0];
+      if (opt && opt.dataset.count) numImages = parseInt(opt.dataset.count, 10);
+    }
     initSyntheticGrid(numImages);
     document.getElementById("syntheticCount").textContent = `0 / ${numImages}`;
 
@@ -658,6 +714,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (datasetZipFile) {
       formData.append("dataset_zip", datasetZipFile);
+    }
+    if (selectedDatasetId) {
+      formData.append("existing_dataset", selectedDatasetId);
     }
 
     let jobId;

@@ -528,6 +528,40 @@ body {
   color: #fff;
 }
 
+/* Dataset source selector */
+.dataset-source-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  margin-bottom: 8px;
+}
+
+.dataset-source-row .setting-input {
+  flex: 1;
+}
+
+.dataset-refresh-btn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-sub);
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 12px;
+  transition: border-color var(--transition), color var(--transition);
+  line-height: 1;
+}
+
+.dataset-refresh-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.dataset-refresh-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .views-upload-row {
   display: flex;
   align-items: center;

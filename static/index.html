@@ -87,16 +87,22 @@
           <span class="setting-hint">Required — Flux 2 DEV is a gated model</span>
         </div>
         <div class="setting-group wide">
-          <label class="setting-label">Dataset ZIP <span class="optional">(optional)</span></label>
+          <label class="setting-label">Dataset <span class="optional">(optional — skip synthesis)</span></label>
+          <div class="dataset-source-row">
+            <select class="setting-input" id="existingDataset">
+              <option value="">Select from server...</option>
+            </select>
+            <button class="dataset-refresh-btn" id="refreshDatasets" type="button" title="Refresh">&#x21bb;</button>
+          </div>
           <div class="views-upload-row">
             <label class="views-zip-label" for="datasetZipInput">
-              <span>Upload previous dataset (.zip) to skip synthesis</span>
+              <span>Or upload new dataset (.zip)</span>
               <input type="file" id="datasetZipInput" accept=".zip" hidden>
               <span class="views-zip-name" id="datasetZipName"></span>
             </label>
             <button class="views-zip-clear" id="datasetZipClear" hidden>&times;</button>
           </div>
-          <span class="setting-hint">Contains images + captions from a previous run. Skips Flux 2 synthesis and captioning.</span>
+          <span class="setting-hint">Reuse a dataset from a previous run or upload a new one. Skips synthesis and captioning.</span>
         </div>
         <div class="setting-group">
           <label class="setting-label" for="synthesizer">Synthesizer</label>
