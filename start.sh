@@ -61,6 +61,10 @@ while i < len(lines):
     stripped = lines[i].strip()
     already_wrapped = (i > 0 and lines[i-1].strip() == 'try:')
     if stripped.startswith('from transformers import') and not already_wrapped:
+        # Skip multiline imports (backslash continuation or parenthesized)
+        if stripped.endswith('\\\\') or ('(' in stripped and ')' not in stripped):
+            i += 1
+            continue
         m = re.match(r'from transformers import (.+)', stripped)
         if m:
             indent = lines[i][:len(lines[i]) - len(lines[i].lstrip())]

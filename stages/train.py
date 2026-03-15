@@ -380,15 +380,33 @@ class LoRATrainer:
 
     def _patch_custom_adapter(self) -> None:
         """
-        Wrap ``from transformers import …`` lines in ``custom_adapter.py``
-        with try/except so that classes removed in transformers 5.x
-        (ViTHybridImageProcessor, etc.) don't crash the import.
+        Wrap single-line ``from transformers import …`` statements in
+        ``custom_adapter.py`` with try/except so that classes removed in
+        transformers 5.x (ViTHybridImageProcessor, etc.) don't crash the
+        import.  Multiline imports (parenthesized or backslash-continued)
+        are skipped — they contain classes that still exist.
         """
         import re
+        import shutil
+        import subprocess
 
         target = os.path.join(self.toolkit_path, "toolkit", "custom_adapter.py")
         if not os.path.isfile(target):
             return
+
+        # Reset to clean upstream state first so we never stack patches
+        # on top of a previously-broken file.
+        git_dir = os.path.join(self.toolkit_path, ".git")
+        if os.path.isdir(git_dir):
+            subprocess.run(
+                ["git", "checkout", "--", "toolkit/custom_adapter.py"],
+                cwd=self.toolkit_path, capture_output=True, timeout=5,
+            )
+
+        # Clear cached bytecode so Python re-reads the patched source.
+        pycache = os.path.join(self.toolkit_path, "toolkit", "__pycache__")
+        if os.path.isdir(pycache):
+            shutil.rmtree(pycache, ignore_errors=True)
 
         with open(target) as f:
             lines = f.readlines()
@@ -399,6 +417,10 @@ class LoRATrainer:
             stripped = lines[i].strip()
             already_wrapped = i > 0 and lines[i - 1].strip() == "try:"
             if stripped.startswith("from transformers import") and not already_wrapped:
+                # Skip multiline imports — backslash continuation or parens
+                if stripped.endswith("\\") or ("(" in stripped and ")" not in stripped):
+                    i += 1
+                    continue
                 m = re.match(r"from transformers import (.+)", stripped)
                 if m:
                     indent = lines[i][: len(lines[i]) - len(lines[i].lstrip())]
@@ -437,6 +459,35 @@ class LoRATrainer:
                 AI Toolkit checkout.
         """
         self._patch_custom_adapter()
+
+        # Clear cached modules from any previous (possibly failed) import
+        # so Python re-reads the freshly-patched source files.
+        for mod_name in list(sys.modules):
+            if mod_name.startswith(("toolkit.", "jobs.")):
+                del sys.modules[mod_name]
+        for mod_name in ("toolkit", "jobs"):
+            sys.modules.pop(mod_name, None)
+
+        # Monkey-patch transformers to return stubs for removed classes.
+        # Belt-and-suspenders: even if the file patcher missed something,
+        # this intercepts the __getattr__ lookup that raises ImportError.
+        try:
+            import transformers as _tf
+            _STUB_NAMES = frozenset({
+                "ViTHybridImageProcessor", "ViTHybridForImageClassification",
+                "ViTFeatureExtractor", "ViTForImageClassification",
+            })
+            _orig_getattr = _tf.__class__.__getattr__
+
+            def _patched_getattr(self, name):
+                if name in _STUB_NAMES:
+                    return type(name, (), {})
+                return _orig_getattr(self, name)
+
+            _tf.__class__.__getattr__ = _patched_getattr
+        except Exception:
+            pass
+
         try:
             from toolkit.job import run_job  # type: ignore[import]
         except ImportError as exc:
