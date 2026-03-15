@@ -186,7 +186,29 @@ class LoRATrainer:
             f"lr={learning_rate}, resolution={resolution}"
         )
 
-        self._run_toolkit(config)
+        # When sample_every >= steps, disable sampling entirely by
+        # monkey-patching BaseSDTrainProcess.sample to a no-op.  AI Toolkit
+        # unconditionally calls self.sample() for baseline images even when
+        # no sample config is present, which crashes on Z-Image's Qwen3
+        # tokenizer path.
+        _patched_sample = False
+        _original_sample = None
+        if sample_every >= steps:
+            try:
+                from jobs.process.BaseSDTrainProcess import BaseSDTrainProcess
+                _original_sample = BaseSDTrainProcess.sample
+                BaseSDTrainProcess.sample = lambda self, *a, **kw: None
+                _patched_sample = True
+                print("[Chimera] LoRATrainer: sampling disabled for this run")
+            except ImportError:
+                pass
+
+        try:
+            self._run_toolkit(config)
+        finally:
+            if _patched_sample and _original_sample is not None:
+                from jobs.process.BaseSDTrainProcess import BaseSDTrainProcess
+                BaseSDTrainProcess.sample = _original_sample
 
         final_checkpoint = self._find_final_checkpoint(output_dir, output_name)
         print(
