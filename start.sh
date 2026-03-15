@@ -102,9 +102,10 @@ else:
     fi
 fi
 
-# Verify critical import
-echo "[Chimera] Verifying Flux2KleinKVPipeline import..."
+# Verify critical imports
+echo "[Chimera] Verifying critical pipeline imports..."
 python3 -c "from diffusers import Flux2KleinKVPipeline; print('[Chimera] Flux2KleinKVPipeline — OK')" || echo "[Chimera] WARNING: Flux2KleinKVPipeline not available — Klein 9B KV will not work"
+python3 -c "from diffusers import FluxImg2ImgPipeline; print('[Chimera] FluxImg2ImgPipeline — OK')" || echo "[Chimera] WARNING: FluxImg2ImgPipeline not available — Enhanced Mode will not work"
 
 echo "[Chimera] Starting server on port ${PORT:-7860}..."
 exec python3 server.py
