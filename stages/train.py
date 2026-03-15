@@ -523,26 +523,29 @@ class LoRATrainer:
                 f"Original error: {exc}"
             ) from exc
 
-        # Patch encode_prompts_flux to handle None/non-string prompts.
-        # AI Toolkit passes None as the unconditional prompt, which crashes
-        # transformers 5.x tokenizers that require str input.
+        # Patch tokenizer __call__ to handle None/non-string text inputs.
+        # AI Toolkit's encode_prompts_flux passes None as the unconditional
+        # prompt text, which crashes transformers 5.x tokenizers.  We patch
+        # the tokenizer base class to convert None → "" at the call boundary.
         try:
-            import toolkit.train_tools as _train_tools
-            _orig_encode_flux = _train_tools.encode_prompts_flux
+            from transformers.tokenization_utils_base import PreTrainedTokenizerBase
+            if not hasattr(PreTrainedTokenizerBase, "_chimera_patched"):
+                _orig_call = PreTrainedTokenizerBase.__call__
 
-            def _safe_encode_prompts_flux(*args, **kwargs):
-                # Sanitize the prompt argument (3rd positional arg)
-                args = list(args)
-                if len(args) >= 3 and not isinstance(args[2], (str, list)):
-                    args[2] = "" if args[2] is None else str(args[2])
-                if "prompt" in kwargs and not isinstance(kwargs["prompt"], (str, list)):
-                    kwargs["prompt"] = "" if kwargs["prompt"] is None else str(kwargs["prompt"])
-                return _orig_encode_flux(*args, **kwargs)
+                def _safe_tokenizer_call(self, text=None, *args, **kwargs):
+                    if text is None:
+                        text = ""
+                    if isinstance(text, list):
+                        text = [t if isinstance(t, str) else ("" if t is None else str(t)) for t in text]
+                    elif not isinstance(text, str):
+                        text = str(text)
+                    return _orig_call(self, text, *args, **kwargs)
 
-            _train_tools.encode_prompts_flux = _safe_encode_prompts_flux
-            print("[Chimera] LoRATrainer: patched encode_prompts_flux for None prompt safety")
+                PreTrainedTokenizerBase.__call__ = _safe_tokenizer_call
+                PreTrainedTokenizerBase._chimera_patched = True
+                print("[Chimera] LoRATrainer: patched tokenizer __call__ for None text safety")
         except Exception as exc:
-            print(f"[Chimera] LoRATrainer: WARNING — could not patch encode_prompts_flux: {exc}")
+            print(f"[Chimera] LoRATrainer: WARNING — could not patch tokenizer: {exc}")
 
         run_job(config)
 
