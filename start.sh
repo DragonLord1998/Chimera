@@ -42,31 +42,44 @@ pip install --ignore-installed --break-system-packages flask pillow google-genai
 # Fix numpy/scipy binary incompatibility (scipy compiled against older numpy)
 pip install --break-system-packages --no-cache-dir --force-reinstall scipy || true
 
-# Patch AI Toolkit for transformers 5.x: ViTHybrid classes removed
+# Patch AI Toolkit for transformers 5.x: wrap all removed imports in try/except
 if [ -f "ai-toolkit/toolkit/custom_adapter.py" ]; then
     # Reset to clean git state first to undo any prior broken patches
     (cd ai-toolkit && git checkout -- toolkit/custom_adapter.py) 2>/dev/null
 
-    # Now patch the clean file
+    # Wrap every bare "from transformers import ..." line in try/except
     python3 -c "
+import re
+
 p = 'ai-toolkit/toolkit/custom_adapter.py'
 with open(p) as f:
-    c = f.read()
+    lines = f.readlines()
 
-old = 'from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification'
-new = '''try:
-    from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification
-except ImportError:
-    ViTHybridImageProcessor = None
-    ViTHybridForImageClassification = None'''
+patched = 0
+i = 0
+while i < len(lines):
+    stripped = lines[i].strip()
+    already_wrapped = (i > 0 and lines[i-1].strip() == 'try:')
+    if stripped.startswith('from transformers import') and not already_wrapped:
+        m = re.match(r'from transformers import (.+)', stripped)
+        if m:
+            indent = lines[i][:len(lines[i]) - len(lines[i].lstrip())]
+            names = [n.strip() for n in m.group(1).split(',')]
+            block = [indent + 'try:\n', indent + '    ' + stripped + '\n', indent + 'except ImportError:\n']
+            for name in names:
+                block.append(indent + '    ' + name + ' = None\n')
+            lines[i:i+1] = block
+            patched += 1
+            i += len(block)
+            continue
+    i += 1
 
-if old in c:
-    c = c.replace(old, new)
+if patched:
     with open(p, 'w') as f:
-        f.write(c)
-    print('[Chimera] Patched AI Toolkit: ViTHybrid import')
+        f.writelines(lines)
+    print(f'[Chimera] Patched AI Toolkit: wrapped {patched} transformers import(s) in try/except')
 else:
-    print('[Chimera] AI Toolkit ViTHybrid: import line not found (already patched or removed)')
+    print('[Chimera] AI Toolkit: all transformers imports already wrapped')
 " || true
 
     # Verify syntax
