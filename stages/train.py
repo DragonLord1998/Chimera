@@ -460,11 +460,6 @@ class LoRATrainer:
         """
         self._patch_custom_adapter()
 
-        # If a previous import of custom_adapter failed, Python already
-        # removed it from sys.modules.  Flush only that one module so
-        # Python re-reads the freshly-patched file on the next import.
-        sys.modules.pop("toolkit.custom_adapter", None)
-
         # Monkey-patch transformers to return stubs for removed classes.
         # Belt-and-suspenders: even if the file patcher missed something,
         # this intercepts the __getattr__ lookup that raises ImportError.
