@@ -523,6 +523,27 @@ class LoRATrainer:
                 f"Original error: {exc}"
             ) from exc
 
+        # Patch encode_prompts_flux to handle None/non-string prompts.
+        # AI Toolkit passes None as the unconditional prompt, which crashes
+        # transformers 5.x tokenizers that require str input.
+        try:
+            import toolkit.train_tools as _train_tools
+            _orig_encode_flux = _train_tools.encode_prompts_flux
+
+            def _safe_encode_prompts_flux(*args, **kwargs):
+                # Sanitize the prompt argument (3rd positional arg)
+                args = list(args)
+                if len(args) >= 3 and not isinstance(args[2], (str, list)):
+                    args[2] = "" if args[2] is None else str(args[2])
+                if "prompt" in kwargs and not isinstance(kwargs["prompt"], (str, list)):
+                    kwargs["prompt"] = "" if kwargs["prompt"] is None else str(kwargs["prompt"])
+                return _orig_encode_flux(*args, **kwargs)
+
+            _train_tools.encode_prompts_flux = _safe_encode_prompts_flux
+            print("[Chimera] LoRATrainer: patched encode_prompts_flux for None prompt safety")
+        except Exception as exc:
+            print(f"[Chimera] LoRATrainer: WARNING — could not patch encode_prompts_flux: {exc}")
+
         run_job(config)
 
     @staticmethod
