@@ -145,8 +145,8 @@ body {
 .settings-panel {
   position: fixed;
   top: 0;
-  right: -420px;
-  width: 400px;
+  right: -520px;
+  width: 500px;
   height: 100vh;
   background: var(--bg-raised);
   border-left: 1px solid var(--border);
@@ -285,7 +285,7 @@ body {
 
 .panel-textarea {
   width: 100%;
-  min-height: 90px;
+  min-height: 120px;
   padding: 10px 14px;
   background: var(--bg-surface);
   border: 1px solid var(--border);

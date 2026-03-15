@@ -311,7 +311,7 @@ class LoRATrainer:
                             "dtype": "bf16",
                         },
                         "model": self._model_block(),
-                        "sample": {
+                        **({"sample": {
                             "sampler": "flowmatch",
                             "sample_every": sample_every,
                             "width": 1024,
@@ -321,7 +321,7 @@ class LoRATrainer:
                             "walk_seed": True,
                             "guidance_scale": 4.5 if self.base_model == "flux_krea" else 4.0,
                             "sample_steps": 20,
-                        },
+                        }} if sample_every < steps else {}),
                     }
                 ],
             },
