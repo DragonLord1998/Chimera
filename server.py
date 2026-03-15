@@ -909,7 +909,9 @@ def _run_pipeline(
         _tqdm_step = [0]  # [current_step] — mutable for thread safety
 
         import re as _re
-        _TQDM_RE = _re.compile(r'\b(\d+)/(\d+)\s*\[')
+        # Only match tqdm bars whose total matches our training steps.
+        # This filters out cache_latents, model-loading, and other tqdm bars.
+        _TQDM_RE = _re.compile(r'\b(\d+)/' + str(total_steps) + r'\s*\[')
 
         class _StderrCapture:
             """Wraps stderr to parse tqdm progress from AI Toolkit in real time."""
