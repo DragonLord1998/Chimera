@@ -36,8 +36,18 @@ pip install --break-system-packages -U "transformers>=5.0" "huggingface-hub>=1.0
 echo "[Chimera] Re-installing diffusers from GitHub main (post ai-toolkit)..."
 pip install --break-system-packages -U git+https://github.com/huggingface/diffusers.git || true
 
-# Re-install Flask and other deps that may have been clobbered by upgrades
-pip install --ignore-installed --break-system-packages flask pillow google-genai sentencepiece oyaml einops || true
+# Re-install ALL ai-toolkit deps that may have been clobbered by the upgrades above
+if [ -f "ai-toolkit/requirements.txt" ]; then
+    echo "[Chimera] Re-installing ai-toolkit requirements (post upgrades)..."
+    pip install --break-system-packages -r ai-toolkit/requirements.txt 2>/dev/null || true
+fi
+
+# Final pin: ensure transformers 5.x + diffusers main stay on top
+pip install --break-system-packages -U "transformers>=5.0" "huggingface-hub>=1.0" || true
+pip install --break-system-packages -U git+https://github.com/huggingface/diffusers.git || true
+
+# Re-install Flask and other Chimera-specific deps
+pip install --ignore-installed --break-system-packages flask pillow google-genai sentencepiece || true
 
 # Fix numpy/scipy binary incompatibility (scipy compiled against older numpy)
 pip install --break-system-packages --no-cache-dir --force-reinstall scipy || true
