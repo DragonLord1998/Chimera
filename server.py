@@ -142,10 +142,8 @@ try:
         "ViTHybridImageProcessor", "ViTHybridForImageClassification",
         "ViTFeatureExtractor", "ViTForImageClassification",
     ):
-        try:
-            getattr(_tf, _cls_name)
-        except (AttributeError, ImportError):
-            setattr(_tf, _cls_name, type(_cls_name, (), {}))
+        # Bypass _LazyModule.__getattr__/__setattr__ — write directly to __dict__
+        _tf.__dict__[_cls_name] = type(_cls_name, (), {})
 except Exception:
     pass
 
