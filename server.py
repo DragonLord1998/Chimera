@@ -403,33 +403,45 @@ def download_lora(job_id: str):
                      download_name=os.path.basename(lora_path))
 
 
-@app.route("/api/download-checkpoint/<job_id>/<filename>")
-def download_checkpoint(job_id: str, filename: str):
-    """Download a specific checkpoint .safetensors file."""
-    if not filename.endswith(".safetensors") or "/" in filename or ".." in filename:
-        return jsonify({"error": "Invalid filename"}), 400
-
+@app.route("/api/download-checkpoint/<job_id>/<int:step>")
+def download_checkpoint(job_id: str, step: int):
+    """Download the checkpoint .safetensors closest to the given step."""
     with _jobs_lock:
         job = _jobs.get(job_id)
 
     if not job:
-        # Try to find job dir on disk (survives server restart)
         job_dir = os.path.join(JOBS_DIR, job_id)
         if not os.path.isdir(job_dir):
             return jsonify({"error": "Unknown job"}), 404
     else:
         job_dir = job.get("job_dir", os.path.join(JOBS_DIR, job_id))
 
-    # Search output directory for the file
+    # Find all .safetensors in the output directory
     output_dir = os.path.join(job_dir, "output")
-    if os.path.isdir(output_dir):
-        for root, _dirs, files in os.walk(output_dir):
-            if filename in files:
-                filepath = os.path.join(root, filename)
-                return send_file(filepath, as_attachment=True,
-                                 download_name=filename)
+    if not os.path.isdir(output_dir):
+        return jsonify({"error": "No output directory"}), 404
 
-    return jsonify({"error": "Checkpoint file not found"}), 404
+    best_match = None
+    best_diff = float("inf")
+    for root, _dirs, files in os.walk(output_dir):
+        for f in files:
+            if not f.endswith(".safetensors"):
+                continue
+            # Parse step from filename: {name}_step{N}.safetensors
+            try:
+                s = int(f.rsplit("_step", 1)[-1].split(".")[0])
+            except (ValueError, IndexError):
+                continue
+            diff = abs(s - step)
+            if diff < best_diff:
+                best_diff = diff
+                best_match = os.path.join(root, f)
+
+    if not best_match:
+        return jsonify({"error": "Checkpoint file not found (not saved yet?)"}), 404
+
+    return send_file(best_match, as_attachment=True,
+                     download_name=os.path.basename(best_match))
 
 
 # ---------------------------------------------------------------------------
@@ -963,7 +975,6 @@ def _run_pipeline(
         def _watcher():
             """Poll tqdm progress, checkpoint files, and sample images."""
             seen_checkpoints: set[str] = set()
-            checkpoint_files: dict[int, str] = {}  # step → filename
             seen_samples: set[str] = set()
             step_estimate = 0
             last_emitted_step = -1
@@ -990,12 +1001,6 @@ def _run_pipeline(
                     new_ckpts = [c for c in ckpts if c not in seen_checkpoints]
                     for ckpt_name in new_ckpts:
                         seen_checkpoints.add(ckpt_name)
-                        # Parse step number: {name}_step{N}.safetensors
-                        try:
-                            step_str = ckpt_name.rsplit("_step", 1)[-1].split(".")[0]
-                            checkpoint_files[int(step_str)] = ckpt_name
-                        except (ValueError, IndexError):
-                            pass
 
                 # 3. Sample images (AI Toolkit outputs .jpg)
                 if os.path.isdir(samples_dir):
@@ -1030,11 +1035,10 @@ def _run_pipeline(
                     timed_out = (now - info["first_seen"]) > 60
                     if have_all or timed_out:
                         effective_step = s_step if s_step >= 0 else step_estimate
-                        ckpt_file = checkpoint_files.get(effective_step)
                         emit("checkpoint", {
                             "step": effective_step,
                             "images": info["urls"],
-                            "download_url": f"/api/download-checkpoint/{job_id}/{ckpt_file}" if ckpt_file else None,
+                            "download_url": f"/api/download-checkpoint/{job_id}/{effective_step}",
                         })
                         done_steps.append(s_step)
 
