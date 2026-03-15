@@ -48,6 +48,32 @@ function resetViewPlaceholders() {
 }
 
 // ---------------------------------------------------------------------------
+// Smart defaults engine
+// ---------------------------------------------------------------------------
+
+function updateRecommendations(numImages) {
+  let lr, steps, rank, batch;
+  if (numImages <= 25) {
+    lr = "1e-4"; steps = 1500; rank = 32; batch = 1;
+  } else if (numImages <= 50) {
+    lr = "8e-5"; steps = 2000; rank = 32; batch = 1;
+  } else if (numImages <= 100) {
+    lr = "5e-5"; steps = 2500; rank = 48; batch = 2;
+  } else if (numImages <= 200) {
+    lr = "4e-5"; steps = 3000; rank = 48; batch = 2;
+  } else {
+    lr = "3e-5"; steps = 3500; rank = 64; batch = 4;
+  }
+
+  const hintEl = document.getElementById("batchSizeHint");
+  if (hintEl) {
+    hintEl.textContent = `Recommended: ${batch} for ${numImages} images`;
+  }
+
+  return { lr, steps, rank, batch };
+}
+
+// ---------------------------------------------------------------------------
 // Synthetic grid initialisation
 // ---------------------------------------------------------------------------
 
@@ -261,7 +287,54 @@ function onUpscaledEvent(data) {
   }
 }
 
+function onFirstPassProgress(data) {
+  const pct = Math.min((data.step / data.total) * 100, 100);
+  document.getElementById("firstPassFill").style.width = pct + "%";
+  document.getElementById("firstPassGlow").style.left = pct + "%";
+  document.getElementById("firstPassText").textContent =
+    data.step.toLocaleString() + " / " + data.total.toLocaleString();
+  activateSection("sectionFirstPass");
+}
+
+function onEnhanceProgress(data) {
+  document.getElementById("enhancementCount").textContent =
+    data.current + " / " + data.total;
+  activateSection("sectionEnhancement");
+}
+
+function onEnhancedEvent(data) {
+  const grid = document.getElementById("enhancementGrid");
+  activateSection("sectionEnhancement");
+
+  const cell = document.createElement("div");
+  cell.className = "synthetic-cell loaded";
+  cell.dataset.index = data.index;
+  cell.style.setProperty("--i", data.index);
+
+  // Store URLs for triple comparison
+  cell.dataset.preEnhanceUrl = data.pre_enhance_url;
+  cell.dataset.enhancedUrl = data.enhanced_url;
+  cell.classList.add("has-comparison");
+
+  const img = document.createElement("img");
+  img.src = data.enhanced_url + "?t=" + Date.now();
+  img.alt = "enhanced " + (data.index + 1);
+  img.loading = "lazy";
+  cell.appendChild(img);
+
+  // Add "Enhanced" badge
+  const badge = document.createElement("div");
+  badge.className = "compare-badge";
+  badge.textContent = "Enhanced";
+  cell.appendChild(badge);
+
+  grid.appendChild(cell);
+}
+
+// ---------------------------------------------------------------------------
 // Before/After comparison slider (opens on click)
+// ---------------------------------------------------------------------------
+
 function openComparison(originalUrl, upscaledUrl) {
   // Remove existing overlay
   const existing = document.getElementById("comparisonOverlay");
@@ -359,6 +432,166 @@ function openComparison(originalUrl, upscaledUrl) {
   overlay.addEventListener("click", e => { if (e.target === overlay) cleanup(); });
 }
 
+// ---------------------------------------------------------------------------
+// Triple comparison viewer (tabbed: Original | Upscaled | Enhanced)
+// ---------------------------------------------------------------------------
+
+function openTripleComparison(originalUrl, upscaledUrl, enhancedUrl) {
+  // Remove existing overlay
+  const existing = document.getElementById("comparisonOverlay");
+  if (existing) existing.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "comparisonOverlay";
+  overlay.className = "comparison-overlay";
+
+  const container = document.createElement("div");
+  container.className = "comparison-container triple-comparison-container";
+
+  const closeBtn = document.createElement("div");
+  closeBtn.className = "comparison-close";
+  closeBtn.textContent = "\u00d7";
+  container.appendChild(closeBtn);
+
+  // Tab bar
+  const tabs = document.createElement("div");
+  tabs.className = "triple-tabs";
+  const tabDefs = [
+    { key: "original",  label: "Original (1024px)" },
+    { key: "upscaled",  label: "Upscaled (2048px)" },
+    { key: "enhanced",  label: "Enhanced (2048px)" },
+  ];
+  const tabEls = {};
+  tabDefs.forEach(t => {
+    const btn = document.createElement("button");
+    btn.className = "triple-tab";
+    btn.textContent = t.label;
+    btn.dataset.key = t.key;
+    tabs.appendChild(btn);
+    tabEls[t.key] = btn;
+  });
+  container.appendChild(tabs);
+
+  // Slider label row
+  const labels = document.createElement("div");
+  labels.className = "comparison-labels triple-slider-labels";
+  const labelLeft = document.createElement("span");
+  labelLeft.className = "comparison-label-left";
+  const labelRight = document.createElement("span");
+  labelRight.className = "comparison-label-right";
+  labels.appendChild(labelLeft);
+  labels.appendChild(labelRight);
+  container.appendChild(labels);
+
+  // Comparison wrapper (reuse existing slider mechanism)
+  const wrapper = document.createElement("div");
+  wrapper.className = "comparison-wrapper";
+
+  const imgBack = document.createElement("img");
+  imgBack.className = "comparison-img comparison-img-upscaled";
+  imgBack.alt = "right panel";
+  wrapper.appendChild(imgBack);
+
+  const clip = document.createElement("div");
+  clip.className = "comparison-clip";
+  const imgFront = document.createElement("img");
+  imgFront.className = "comparison-img comparison-img-original";
+  imgFront.alt = "left panel";
+  clip.appendChild(imgFront);
+  wrapper.appendChild(clip);
+
+  const sliderEl = document.createElement("div");
+  sliderEl.className = "comparison-slider";
+  const handle = document.createElement("div");
+  handle.className = "comparison-handle";
+  sliderEl.appendChild(handle);
+  wrapper.appendChild(sliderEl);
+
+  container.appendChild(wrapper);
+  overlay.appendChild(container);
+  document.body.appendChild(overlay);
+
+  // URL map
+  const urlMap = {
+    original: originalUrl,
+    upscaled: upscaledUrl,
+    enhanced: enhancedUrl,
+  };
+
+  // State: which two panels are being compared
+  // Default: upscaled (left) vs enhanced (right)
+  let leftKey = "upscaled";
+  let rightKey = "enhanced";
+
+  function applyTab(activeKey) {
+    // Determine pair: clicking a tab sets it as left, right becomes the "next" in sequence
+    const order = ["original", "upscaled", "enhanced"];
+    const idx = order.indexOf(activeKey);
+    leftKey = activeKey;
+    rightKey = order[(idx + 1) % order.length];
+
+    // Update tab styles
+    Object.entries(tabEls).forEach(([k, el]) => {
+      el.classList.toggle("active", k === activeKey);
+    });
+
+    // Update images
+    imgFront.src = urlMap[leftKey];
+    imgBack.src  = urlMap[rightKey];
+
+    // Update labels
+    const labelNames = {
+      original: "Original 1024px",
+      upscaled: "SeedVR2 2048px",
+      enhanced: "Enhanced 2048px",
+    };
+    labelLeft.textContent  = labelNames[leftKey];
+    labelRight.textContent = labelNames[rightKey];
+
+    // Reset slider to 50%
+    setTimeout(() => {
+      const rect = wrapper.getBoundingClientRect();
+      updateSlider(rect.left + rect.width * 0.5);
+    }, 30);
+  }
+
+  function updateSlider(x) {
+    const rect = wrapper.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(100, ((x - rect.left) / rect.width) * 100));
+    clip.style.width = pct + "%";
+    sliderEl.style.left = pct + "%";
+  }
+
+  // Tab click handlers
+  Object.entries(tabEls).forEach(([key, el]) => {
+    el.addEventListener("click", () => applyTab(key));
+  });
+
+  // Default view: upscaled vs enhanced
+  applyTab("upscaled");
+
+  let dragging = false;
+  function onMouseUp() { dragging = false; }
+  function cleanup() {
+    window.removeEventListener("mouseup", onMouseUp);
+    overlay.remove();
+  }
+
+  wrapper.addEventListener("mousedown", () => { dragging = true; });
+  window.addEventListener("mouseup", onMouseUp);
+  wrapper.addEventListener("mousemove", e => { if (dragging) updateSlider(e.clientX); });
+  wrapper.addEventListener("click", e => updateSlider(e.clientX));
+
+  wrapper.addEventListener("touchstart", () => { dragging = true; });
+  wrapper.addEventListener("touchend", () => { dragging = false; });
+  wrapper.addEventListener("touchmove", e => {
+    if (dragging) updateSlider(e.touches[0].clientX);
+  });
+
+  closeBtn.addEventListener("click", cleanup);
+  overlay.addEventListener("click", e => { if (e.target === overlay) cleanup(); });
+}
+
 function onCompleteEvent(data, evtSource, startBtn) {
   setStatus("Complete!", "done");
 
@@ -425,6 +658,18 @@ function connectToJob(jobId, startBtn) {
     onCheckpointEvent(JSON.parse(e.data));
   });
 
+  evtSource.addEventListener("first_pass_progress", e => {
+    onFirstPassProgress(JSON.parse(e.data));
+  });
+
+  evtSource.addEventListener("enhanced", e => {
+    onEnhancedEvent(JSON.parse(e.data));
+  });
+
+  evtSource.addEventListener("enhance_progress", e => {
+    onEnhanceProgress(JSON.parse(e.data));
+  });
+
   evtSource.addEventListener("complete", e => {
     onCompleteEvent(JSON.parse(e.data), evtSource, startBtn);
   });
@@ -456,7 +701,11 @@ function connectToJob(jobId, startBtn) {
     }
   }, 30_000);
 
-  ["stage", "view", "synthetic", "diffusion_preview", "upscaled", "progress", "checkpoint", "complete", "heartbeat"].forEach(
+  [
+    "stage", "view", "synthetic", "diffusion_preview", "upscaled",
+    "progress", "checkpoint", "first_pass_progress", "enhanced",
+    "enhance_progress", "complete", "heartbeat",
+  ].forEach(
     name => evtSource.addEventListener(name, () => { lastActivity = Date.now(); })
   );
 
@@ -619,11 +868,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // Init grid with default 25 placeholders
   initSyntheticGrid(25);
 
-  // Click handler for before/after comparison on synthetic cells
+  // Click handler for before/after (or triple) comparison on synthetic cells
   document.getElementById("syntheticGrid").addEventListener("click", e => {
+    const cell = e.target.closest(".synthetic-cell");
+    if (!cell) return;
+    const hasEnhanced = cell.dataset.enhancedUrl && cell.dataset.originalUrl && cell.dataset.upscaledUrl;
+    if (hasEnhanced) {
+      openTripleComparison(cell.dataset.originalUrl, cell.dataset.upscaledUrl, cell.dataset.enhancedUrl);
+    } else if (cell.classList.contains("has-comparison")) {
+      openComparison(cell.dataset.originalUrl, cell.dataset.upscaledUrl);
+    }
+  });
+
+  // Click handler for enhanced image comparison
+  document.getElementById("enhancementGrid").addEventListener("click", e => {
     const cell = e.target.closest(".synthetic-cell.has-comparison");
     if (!cell) return;
-    openComparison(cell.dataset.originalUrl, cell.dataset.upscaledUrl);
+    openComparison(cell.dataset.preEnhanceUrl, cell.dataset.enhancedUrl);
   });
 
   // When synthesizer changes, lock inference steps for Klein
@@ -639,11 +900,35 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Keep grid in sync with numImages setting
+  // Keep grid in sync with numImages setting; update recommendations
   document.getElementById("numImages").addEventListener("input", e => {
-    const n = Math.max(10, Math.min(50, parseInt(e.target.value, 10) || 25));
+    const n = Math.max(10, Math.min(300, parseInt(e.target.value, 10) || 25));
     initSyntheticGrid(n);
+    updateRecommendations(n);
   });
+
+  // Enhanced mode toggle
+  const enhancedModeToggle = document.getElementById("enhancedMode");
+  const enhancementSettings = document.getElementById("enhancementSettings");
+
+  if (enhancedModeToggle && enhancementSettings) {
+    enhancedModeToggle.addEventListener("change", () => {
+      enhancementSettings.style.display = enhancedModeToggle.checked ? "" : "none";
+      // Update step numbers based on mode
+      const trainingStepNum = document.getElementById("trainingStepNum");
+      const checkpointStepNum = document.getElementById("checkpointStepNum");
+      if (enhancedModeToggle.checked) {
+        if (trainingStepNum) trainingStepNum.textContent = "07";
+        if (checkpointStepNum) checkpointStepNum.textContent = "08";
+      } else {
+        if (trainingStepNum) trainingStepNum.textContent = "05";
+        if (checkpointStepNum) checkpointStepNum.textContent = "06";
+      }
+    });
+  }
+
+  // Initial recommendations for default 25 images
+  updateRecommendations(25);
 
   // ---------------------------------------------------------------------------
   // Upload interactions
@@ -712,6 +997,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const totalSteps = parseInt(loraStepsEl.value, 10) || 1500;
     document.getElementById("progressText").textContent = `0 / ${totalSteps.toLocaleString()}`;
 
+    // Reset first-pass progress
+    document.getElementById("firstPassFill").style.width = "0%";
+    document.getElementById("firstPassGlow").style.left = "0%";
+    const firstPassStepsVal = parseInt(document.getElementById("firstPassSteps").value, 10) || 750;
+    document.getElementById("firstPassText").textContent = `0 / ${firstPassStepsVal.toLocaleString()}`;
+
+    // Reset enhancement count
+    document.getElementById("enhancementCount").textContent = "0 / 0";
+    document.getElementById("enhancementGrid").innerHTML = "";
+
     // Reset checkpoint container
     document.getElementById("checkpointContainer").innerHTML = "";
 
@@ -725,8 +1020,12 @@ document.addEventListener("DOMContentLoaded", () => {
     dlDatasetBtn.href = "#";
 
     // Deactivate pipeline sections
-    ["sectionViews", "sectionSynthetic", "sectionTraining", "sectionCheckpoints"].forEach(id => {
-      document.getElementById(id).classList.remove("active");
+    [
+      "sectionViews", "sectionSynthetic", "sectionFirstPass",
+      "sectionEnhancement", "sectionTraining", "sectionCheckpoints",
+    ].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.remove("active");
     });
 
     // Update synthesizer tag in UI
@@ -759,6 +1058,19 @@ document.addEventListener("DOMContentLoaded", () => {
     formData.append("lora_steps", totalSteps);
     formData.append("learning_rate", document.getElementById("learningRate").value);
     formData.append("inference_steps", document.getElementById("inferenceSteps").value);
+    formData.append("batch_size", document.getElementById("batchSize").value);
+    if (document.getElementById("enhancedMode").checked) {
+      formData.append("enhanced_mode", "true");
+      formData.append("first_pass_rank", document.getElementById("firstPassRank").value);
+      formData.append("first_pass_steps", document.getElementById("firstPassSteps").value);
+      formData.append("enhance_denoise", document.getElementById("enhanceDenoise").value);
+      formData.append("enhance_steps", document.getElementById("enhanceSteps").value);
+      formData.append("enhance_lora_weight", document.getElementById("enhanceLoraWeight").value);
+      if (document.getElementById("recaptionAfterEnhance").checked) {
+        formData.append("recaption_after_enhance", "true");
+      }
+    }
+
     const samplePromptsRaw = document.getElementById("samplePrompts").value.trim();
     if (samplePromptsRaw) {
       formData.append("sample_prompts", samplePromptsRaw);
@@ -833,6 +1145,12 @@ document.addEventListener("DOMContentLoaded", () => {
         initSyntheticGrid(numImages);
         document.getElementById("syntheticCount").textContent = `0 / ${numImages}`;
 
+        // Activate enhanced mode sections if relevant
+        if (data.params && data.params.enhanced_mode) {
+          document.getElementById("sectionFirstPass").classList.add("active");
+          document.getElementById("sectionEnhancement").classList.add("active");
+        }
+
         // Reconnect — the server replays all past events
         connectToJob(data.job_id, startBtn);
       }
@@ -841,3 +1159,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   })();
 });
+
+// ---------------------------------------------------------------------------
+// Update step numbers on pipeline sections based on enhanced mode
+// ---------------------------------------------------------------------------
+

@@ -240,13 +240,22 @@ def start_pipeline():
 
     # Collect params (all optional with defaults)
     try:
-        num_images = max(1, min(100, int(request.form.get("num_images", 25))))
+        num_images = max(1, min(300, int(request.form.get("num_images", 25))))
         lora_rank = max(4, min(128, int(request.form.get("lora_rank", 32))))
         lora_steps = max(100, min(10000, int(request.form.get("lora_steps", 1500))))
         learning_rate = max(1e-6, min(1e-2, float(request.form.get("learning_rate", 1e-4))))
         inference_steps = max(1, min(200, int(request.form.get("inference_steps", 50))))
+        first_pass_rank = max(8, min(32, int(request.form.get("first_pass_rank", 16))))
+        first_pass_steps = max(500, min(2500, int(request.form.get("first_pass_steps", 750))))
+        enhance_denoise = max(0.20, min(0.60, float(request.form.get("enhance_denoise", 0.40))))
+        enhance_steps = max(15, min(50, int(request.form.get("enhance_steps", 28))))
+        enhance_lora_weight = max(0.5, min(1.0, float(request.form.get("enhance_lora_weight", 0.75))))
+        batch_size = max(1, min(4, int(request.form.get("batch_size", 1))))
     except (ValueError, TypeError) as e:
         return jsonify({"error": f"Invalid numeric parameter: {e}"}), 400
+
+    enhanced_mode = request.form.get("enhanced_mode", "").lower() in ("true", "1", "on")
+    recaption_after_enhance = request.form.get("recaption_after_enhance", "").lower() in ("true", "1", "on")
 
     base_model = request.form.get("base_model", "zimage").strip()
     if base_model not in ("zimage", "flux_krea"):
@@ -267,6 +276,14 @@ def start_pipeline():
         "base_model": base_model,
         "synthesizer": synthesizer,
         "sample_prompts": None,
+        "batch_size": batch_size,
+        "enhanced_mode": enhanced_mode,
+        "first_pass_rank": first_pass_rank,
+        "first_pass_steps": first_pass_steps,
+        "enhance_denoise": enhance_denoise,
+        "enhance_steps": enhance_steps,
+        "enhance_lora_weight": enhance_lora_weight,
+        "recaption_after_enhance": recaption_after_enhance,
     }
 
     # Parse sample prompts — one per line, replace TRIGGER with trigger word.
@@ -341,6 +358,7 @@ def start_pipeline():
                 "num_images": params["num_images"],
                 "lora_steps": params["lora_steps"],
                 "synthesizer": params["synthesizer"],
+                "enhanced_mode": params.get("enhanced_mode", False),
             },
         }
 
@@ -981,12 +999,176 @@ def _run_pipeline(
             gc.collect()
 
         # ------------------------------------------------------------------
+        # Enhanced Mode: First-pass training + Dataset Enhancement
+        # ------------------------------------------------------------------
+        from stages.train import LoRATrainer
+
+        first_pass_lora_path = None
+        if params.get("enhanced_mode"):
+            # Download SRPO LoRA if not already present
+            if not mm.is_model_ready("srpo_lora"):
+                stage_msg(3, "Downloading SRPO LoRA for photorealism (~1.5 GB)...")
+                mm._download_with_retry("srpo_lora")
+
+            # ----------------------------------------------------------
+            # Stage 3 (enhanced): First-pass LoRA on FLUX.1-dev
+            # ----------------------------------------------------------
+            first_pass_steps = params.get("first_pass_steps", 750)
+            first_pass_rank = params.get("first_pass_rank", 16)
+            stage_msg(3, f"First-pass LoRA training on FLUX.1-dev (rank {first_pass_rank}, {first_pass_steps} steps)...")
+
+            first_pass_output = os.path.join(job_dir, "first_pass_output")
+            os.makedirs(first_pass_output, exist_ok=True)
+            first_pass_name = f"{trigger}_firstpass"
+
+            first_pass_trainer = LoRATrainer(
+                model_path="black-forest-labs/FLUX.1-dev",
+                toolkit_path=TOOLKIT_PATH,
+                base_model="flux_dev",
+            )
+
+            # Stderr capture for first-pass progress
+            _fp_tqdm_step = [0]
+            _FP_TQDM_RE = _re.compile(r'\b(\d+)/' + str(first_pass_steps) + r'\s*\[')
+
+            class _FPStderrCapture:
+                def __init__(self, real):
+                    self._real = real
+                def write(self, s):
+                    self._real.write(s)
+                    m = _FP_TQDM_RE.search(s)
+                    if m:
+                        _fp_tqdm_step[0] = int(m.group(1))
+                    return len(s)
+                def flush(self):
+                    self._real.flush()
+                def __getattr__(self, name):
+                    return getattr(self._real, name)
+
+            _fp_stop = threading.Event()
+
+            def _fp_watcher():
+                last = -1
+                while not _fp_stop.is_set():
+                    time.sleep(2)
+                    step = _fp_tqdm_step[0]
+                    if step != last:
+                        emit("first_pass_progress", {"step": step, "total": first_pass_steps})
+                        last = step
+
+            fp_watcher_thread = threading.Thread(target=_fp_watcher, daemon=True,
+                                                  name=f"fp-watcher-{job_id}")
+            fp_watcher_thread.start()
+
+            _fp_real_stderr = sys.stderr
+            sys.stderr = _FPStderrCapture(_fp_real_stderr)
+            try:
+                first_pass_lora_path = first_pass_trainer.train(
+                    dataset_dir=dataset_dir,
+                    output_dir=first_pass_output,
+                    output_name=first_pass_name,
+                    trigger_word=trigger,
+                    rank=first_pass_rank,
+                    learning_rate=params["learning_rate"],
+                    steps=first_pass_steps,
+                    resolution=2048,
+                    batch_size=params.get("batch_size", 1),
+                    save_every=first_pass_steps,  # only save final
+                    sample_every=99999,  # skip samples for speed
+                    sample_prompts=["skip"],
+                )
+            finally:
+                sys.stderr = _fp_real_stderr
+
+            _fp_stop.set()
+            fp_watcher_thread.join(timeout=5)
+            emit("first_pass_progress", {"step": first_pass_steps, "total": first_pass_steps})
+
+            first_pass_trainer.cleanup()
+            del first_pass_trainer
+            gc.collect()
+
+            # ----------------------------------------------------------
+            # Stage 4 (enhanced): Dataset Enhancement with img2img
+            # ----------------------------------------------------------
+            stage_msg(4, "Enhancing dataset with FLUX.1-dev + character LoRA + SRPO...")
+            from stages.enhance import DatasetEnhancer
+
+            enhancer = DatasetEnhancer(hf_token=params["hf_token"])
+
+            # Find SRPO LoRA .safetensors file (prefer rank128)
+            srpo_path = None
+            srpo_dir = mm.get_model_path("srpo_lora")
+            if os.path.isdir(srpo_dir):
+                for root, _dirs, files in os.walk(srpo_dir):
+                    for f in sorted(files):
+                        if f.endswith(".safetensors") and os.path.basename(root) == "rank128":
+                            srpo_path = os.path.join(root, f)
+                            break
+                    if srpo_path:
+                        break
+                # Fallback: any .safetensors
+                if not srpo_path:
+                    for root, _dirs, files in os.walk(srpo_dir):
+                        for f in sorted(files, reverse=True):
+                            if f.endswith(".safetensors"):
+                                srpo_path = os.path.join(root, f)
+                                break
+                        if srpo_path:
+                            break
+
+            enhancer.load_model(
+                character_lora_path=first_pass_lora_path,
+                srpo_lora_path=srpo_path,
+                lora_weight=params.get("enhance_lora_weight", 0.75),
+            )
+
+            def _enhance_progress(current, total):
+                emit("enhance_progress", {"current": current, "total": total})
+                stage_msg(4, f"Enhancing image {current}/{total}...")
+
+            def _enhance_image_done(index, pre_rel, enhanced_rel):
+                emit("enhanced", {
+                    "index": index,
+                    "pre_enhance_url": f"/api/images/{job_id}/dataset/{pre_rel}",
+                    "enhanced_url": f"/api/images/{job_id}/dataset/{enhanced_rel}",
+                })
+
+            enhancer.enhance_dataset(
+                dataset_dir=dataset_dir,
+                strength=params.get("enhance_denoise", 0.40),
+                inference_steps=params.get("enhance_steps", 28),
+                progress_callback=_enhance_progress,
+                image_callback=_enhance_image_done,
+            )
+            enhancer.unload_model()
+            del enhancer
+            gc.collect()
+
+            # Optional re-captioning after enhancement
+            if params.get("recaption_after_enhance"):
+                stage_msg(4, "Re-captioning enhanced images with Florence 2...")
+                # Delete old captions so Florence 2 regenerates them
+                for f in os.listdir(dataset_dir):
+                    if f.endswith(".txt"):
+                        os.remove(os.path.join(dataset_dir, f))
+                from stages.caption import CaptionGenerator
+                cap = CaptionGenerator(model_path=mm.get_model_path("florence2"))
+                cap.load_model()
+                cap.caption_dataset(dataset_dir, trigger)
+                cap.unload_model()
+                del cap
+                gc.collect()
+
+            stage_msg(4, "Enhancement complete.")
+
+        # ------------------------------------------------------------------
         # Stage 3 — LoRA training (AI Toolkit / Z-Image)
         # ------------------------------------------------------------------
         model_label = "FLUX.1-Krea-dev" if base_model == "flux_krea" else "Z-Image De-Turbo"
         model_key = "flux_krea" if base_model == "flux_krea" else "zimage_base"
-        stage_msg(3, f"Starting LoRA training with {model_label}...")
-        from stages.train import LoRATrainer
+        final_stage = 5 if params.get("enhanced_mode") else 3
+        stage_msg(final_stage, f"Starting LoRA training with {model_label}...")
 
         trainer = LoRATrainer(
             model_path=mm.get_model_path(model_key),
@@ -1008,7 +1190,6 @@ def _run_pipeline(
         # Shared state: stderr capture writes current step, watcher reads it
         _tqdm_step = [0]  # [current_step] — mutable for thread safety
 
-        import re as _re
         # Only match tqdm bars whose total matches our training steps.
         # This filters out cache_latents, model-loading, and other tqdm bars.
         _TQDM_RE = _re.compile(r'\b(\d+)/' + str(total_steps) + r'\s*\[')
@@ -1122,6 +1303,7 @@ def _run_pipeline(
                 learning_rate=params["learning_rate"],
                 steps=total_steps,
                 resolution=2048,
+                batch_size=params.get("batch_size", 1),
                 save_every=save_every,
                 sample_every=save_every,
                 sample_prompts=params["sample_prompts"],

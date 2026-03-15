@@ -91,6 +91,17 @@ MODEL_REGISTRY: dict[str, dict] = {
         "size_hint": "~29 GB",
         "gated": True,
     },
+    # --- SRPO LoRA (photorealism enhancement, v0.2) ---
+    # Tencent's Semantic Relative Preference Optimization fine-tune of FLUX.1-dev.
+    # Used during dataset enhancement to add photorealistic detail.
+    # Downloaded on demand when user enables Enhanced Mode.
+    "srpo_lora": {
+        "repo_id": "Alissonerdx/flux.1-dev-SRPO-LoRas",
+        "subdir": "srpo_lora",
+        "description": "FLUX.1-dev SRPO LoRA for photorealism (Tencent, ranks 8-128)",
+        "snapshot": True,
+        "size_hint": "~1.5 GB",
+    },
 }
 
 _RETRY_COUNT = 3

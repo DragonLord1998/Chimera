@@ -1138,3 +1138,172 @@ body {
 ::-webkit-scrollbar { width: 6px; background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border-focus); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+
+/* ---------------------------------------------------------
+   Toggle switch
+   --------------------------------------------------------- */
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.88rem;
+  color: var(--text);
+  user-select: none;
+}
+
+/* Hide the raw checkbox — only the styled toggle-switch is visible */
+.toggle-label input[type="checkbox"] {
+  display: none;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background: var(--border);
+  border-radius: 12px;
+  transition: background 0.3s;
+  flex-shrink: 0;
+}
+
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+}
+
+.toggle-label input:checked + .toggle-switch {
+  background: var(--accent);
+}
+
+.toggle-label input:checked + .toggle-switch::after {
+  transform: translateX(20px);
+}
+
+/* ---------------------------------------------------------
+   Enhancement settings panel
+   --------------------------------------------------------- */
+.enhancement-settings {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(124, 92, 252, 0.05);
+  border: 1px solid rgba(124, 92, 252, 0.15);
+  border-radius: 12px;
+  grid-column: 1 / -1;
+}
+
+.enhancement-settings .settings-grid {
+  gap: 14px;
+}
+
+/* ---------------------------------------------------------
+   Enhanced badge (on grid cells)
+   --------------------------------------------------------- */
+.enhanced-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: rgba(120, 80, 255, 0.85);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 3;
+  font-family: var(--font-mono);
+}
+
+.synthetic-cell.has-enhancement { cursor: pointer; }
+.synthetic-cell.has-enhancement:hover { outline: 2px solid rgba(120, 80, 255, 0.8); outline-offset: -2px; }
+
+/* ---------------------------------------------------------
+   Count badge (used in Enhancement section label)
+   --------------------------------------------------------- */
+.count-badge {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-sub);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 1px 8px;
+  border-radius: 100px;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 400;
+}
+
+/* ---------------------------------------------------------
+   First-pass progress bar container
+   --------------------------------------------------------- */
+.progress-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.progress-bar-container .progress-track {
+  flex: 1;
+}
+
+.progress-text {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-sub);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 80px;
+  text-align: right;
+}
+
+/* ---------------------------------------------------------
+   Triple comparison overlay — tabbed variant
+   --------------------------------------------------------- */
+.triple-comparison-container {
+  width: min(92vw, 960px);
+}
+
+.triple-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.triple-tab {
+  flex: 1;
+  padding: 7px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-sub);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition), background var(--transition);
+  text-align: center;
+}
+
+.triple-tab:hover {
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+
+.triple-tab.active {
+  border-color: var(--accent);
+  color: var(--accent-bright);
+  background: var(--accent-glow);
+}
+
+.triple-slider-labels {
+  margin-bottom: 8px;
+}
