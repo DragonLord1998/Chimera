@@ -142,6 +142,11 @@ class DatasetEnhancer:
             f"from {self.REPO_ID} ..."
         )
 
+        # Ensure HF_TOKEN env var is set — some HF hub code paths check
+        # the env var rather than the token= parameter.
+        if self.hf_token:
+            os.environ["HF_TOKEN"] = self.hf_token
+
         self.pipe = FluxImg2ImgPipeline.from_pretrained(
             self.REPO_ID,
             torch_dtype=torch.bfloat16,
