@@ -460,13 +460,10 @@ class LoRATrainer:
         """
         self._patch_custom_adapter()
 
-        # Clear cached modules from any previous (possibly failed) import
-        # so Python re-reads the freshly-patched source files.
-        for mod_name in list(sys.modules):
-            if mod_name.startswith(("toolkit.", "jobs.")):
-                del sys.modules[mod_name]
-        for mod_name in ("toolkit", "jobs"):
-            sys.modules.pop(mod_name, None)
+        # If a previous import of custom_adapter failed, Python already
+        # removed it from sys.modules.  Flush only that one module so
+        # Python re-reads the freshly-patched file on the next import.
+        sys.modules.pop("toolkit.custom_adapter", None)
 
         # Monkey-patch transformers to return stubs for removed classes.
         # Belt-and-suspenders: even if the file patcher missed something,

@@ -37,7 +37,7 @@ echo "[Chimera] Re-installing diffusers from GitHub main (post ai-toolkit)..."
 pip install --break-system-packages -U git+https://github.com/huggingface/diffusers.git || true
 
 # Re-install Flask and other deps that may have been clobbered by upgrades
-pip install --ignore-installed --break-system-packages flask pillow google-genai sentencepiece || true
+pip install --ignore-installed --break-system-packages flask pillow google-genai sentencepiece oyaml || true
 
 # Fix numpy/scipy binary incompatibility (scipy compiled against older numpy)
 pip install --break-system-packages --no-cache-dir --force-reinstall scipy || true
