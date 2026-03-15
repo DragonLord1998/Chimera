@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chimera — Mock UI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* =============================================
+   Chimera Mock UI — Self-contained
+   ============================================= */
+
+:root {
+  --bg:           #08080f;
+  --bg-raised:    #0e0e1a;
+  --bg-surface:   #131320;
+  --bg-elevated:  #181828;
+  --border:       #1e1e30;
+  --border-focus: #3a3a5c;
+  --border-accent:#7c5cfc44;
+
+  --text:         #e2e2ec;
+  --text-sub:     #8888aa;
+  --text-muted:   #50507a;
+
+  --accent:       #7c5cfc;
+  --accent-dim:   #7c5cfc55;
+  --accent-glow:  #7c5cfc33;
+  --accent-bright:#a488ff;
+
+  --green:        #3de8a0;
+  --green-dim:    #3de8a022;
+  --red:          #ff5b72;
+  --orange:       #f5a623;
+
+  --radius-sm:    6px;
+  --radius:       10px;
+  --radius-lg:    16px;
+
+  --font-sans:    'Inter', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 15px; -webkit-font-smoothing: antialiased; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Noise overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px 60px;
+}
+
+/* ---- Header ---- */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.logo {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, var(--accent-bright), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gear-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+  color: var(--text-sub);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 150ms;
+}
+.gear-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.gear-btn svg { width: 20px; height: 20px; }
+
+/* ---- Settings Side Panel ---- */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms;
+}
+.settings-overlay.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.settings-panel {
+  position: fixed;
+  top: 0;
+  right: -420px;
+  width: 400px;
+  height: 100vh;
+  background: var(--bg-raised);
+  border-left: 1px solid var(--border);
+  z-index: 101;
+  transition: right 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+  padding: 28px 24px;
+}
+.settings-panel.open { right: 0; }
+
+.panel-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 24px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.panel-close {
+  background: none;
+  border: none;
+  color: var(--text-sub);
+  font-size: 1.4rem;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+.panel-close:hover { color: var(--text); }
+
+.panel-group {
+  margin-bottom: 18px;
+}
+.panel-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-sub);
+  margin-bottom: 6px;
+}
+.panel-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  outline: none;
+}
+.panel-input:focus { border-color: var(--accent); }
+.panel-input::placeholder { color: var(--text-muted); }
+
+.panel-upload-btn {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-sub);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+  transition: all 150ms;
+}
+.panel-upload-btn:hover {
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+.panel-upload-btn.active {
+  border-color: var(--green);
+  color: var(--green);
+  border-style: solid;
+}
+
+.panel-textarea {
+  width: 100%;
+  min-height: 90px;
+  padding: 10px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  outline: none;
+  resize: vertical;
+}
+.panel-textarea:focus { border-color: var(--accent); }
+
+.panel-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* ---- Top row: Trigger + Live Preview ---- */
+.top-row {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.trigger-group label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-sub);
+  margin-bottom: 6px;
+}
+.trigger-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 500;
+  outline: none;
+}
+.trigger-input:focus { border-color: var(--accent); }
+
+.live-preview {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 120px;
+}
+.live-preview-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+.live-preview-content {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex: 1;
+}
+.live-preview-image {
+  width: 80px;
+  height: 80px;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+.live-preview-prompt {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-sub);
+  line-height: 1.5;
+}
+.live-preview-prompt .trigger-highlight {
+  color: var(--accent-bright);
+  font-weight: 600;
+}
+.live-preview-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* ---- Section ---- */
+.section {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.section-header {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-sub);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.section-tag {
+  font-size: 0.65rem;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--accent-dim);
+  color: var(--accent-bright);
+  font-weight: 600;
+}
+
+/* ---- Gemini Section ---- */
+.gemini-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.upload-btn {
+  padding: 10px 20px;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-sub);
+  cursor: pointer;
+  font-size: 0.82rem;
+  white-space: nowrap;
+  transition: all 150ms;
+  flex-shrink: 0;
+}
+.upload-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.views-grid {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+.view-slot {
+  flex: 1;
+  aspect-ratio: 1;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+/* ---- Dataset Synthesizer Settings ---- */
+.synth-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.synth-cell {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  text-align: center;
+}
+.synth-cell-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-sub);
+  margin-bottom: 4px;
+}
+.synth-cell-value {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.synth-cell select,
+.synth-cell input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  text-align: center;
+  outline: none;
+}
+.synth-cell select option {
+  background: var(--bg-surface);
+}
+
+/* ---- Enhanced Mode Toggle ---- */
+.enhanced-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.enhanced-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-sub);
+}
+.toggle-track {
+  width: 44px;
+  height: 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  cursor: pointer;
+  position: relative;
+  transition: all 200ms;
+}
+.toggle-track.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.toggle-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--text);
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 200ms;
+}
+.toggle-track.on .toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* ---- Enhanced Settings Panel ---- */
+.enhanced-settings {
+  display: none;
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+}
+.enhanced-settings.visible { display: block; }
+
+.enhanced-settings .section-header {
+  margin-bottom: 12px;
+  color: var(--accent-bright);
+}
+
+.enhanced-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+/* ---- Synthetic Images Grid ---- */
+.images-section {
+  position: relative;
+}
+
+.image-layout {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+/* Center hero preview — single large card */
+.hero-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 300px;
+  max-width: 360px;
+}
+
+.hero-card {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color 300ms, box-shadow 300ms;
+}
+.hero-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 30px var(--accent-glow), 0 0 80px rgba(124,92,252,0.1);
+}
+.hero-card-image {
+  width: 100%;
+  aspect-ratio: 1;
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  font-weight: 600;
+  position: relative;
+}
+.hero-card-image.filled {
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+}
+.hero-card-label {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+}
+.hero-card-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+.hero-stage-gen { color: var(--accent-bright); }
+.hero-stage-up { color: var(--green); }
+.hero-stage-enh { color: var(--orange); }
+
+.hero-card-step {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Side thumbnail grids */
+.thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+.img-cell {
+  aspect-ratio: 1;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 150ms;
+  min-width: 0;
+}
+.img-cell:hover {
+  border-color: var(--accent-dim);
+}
+.img-cell.filled {
+  border-style: solid;
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+}
+.img-cell .cell-badge {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 0.5rem;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+.badge-gen { background: var(--accent-dim); color: var(--accent-bright); }
+.badge-up { background: var(--green-dim); color: var(--green); }
+.badge-enh { background: #f5a62322; color: var(--orange); }
+
+/* Pulse animation for latest hero card */
+@keyframes hero-pulse {
+  0%, 100% { box-shadow: 0 0 24px var(--accent-glow); }
+  50% { box-shadow: 0 0 40px var(--accent-glow), 0 0 80px rgba(124,92,252,0.12); }
+}
+.hero-card.pulse { animation: hero-pulse 2s ease-in-out infinite; }
+
+/* ---- Progress Bars ---- */
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.progress-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.progress-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.progress-pct {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-sub);
+  font-weight: 400;
+}
+
+.progress-track {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-surface);
+  border-radius: 99px;
+  position: relative;
+  overflow: visible;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+.fill-purple { background: linear-gradient(90deg, var(--accent), var(--accent-bright)); }
+.fill-green { background: linear-gradient(90deg, #2dd4a0, #3de8a0); }
+.fill-orange { background: linear-gradient(90deg, #e8952d, #f5a623); }
+
+.progress-scrubber {
+  width: 20px;
+  height: 20px;
+  background: var(--text);
+  border: 3px solid var(--bg-raised);
+  border-radius: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  z-index: 2;
+  box-shadow: 0 0 8px rgba(0,0,0,0.4);
+  transition: left 600ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---- Sample / Checkpoint Images ---- */
+.checkpoint-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.checkpoint-row:last-child { border-bottom: none; }
+
+.checkpoint-label {
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.checkpoint-label span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+.checkpoint-dl {
+  font-size: 0.65rem;
+  padding: 3px 10px;
+  border-radius: 4px;
+  background: var(--accent-dim);
+  color: var(--accent-bright);
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: all 150ms;
+}
+.checkpoint-dl:hover {
+  background: var(--accent);
+  color: white;
+}
+
+.checkpoint-images {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+}
+.checkpoint-img {
+  width: 80px;
+  height: 80px;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+.checkpoint-img.filled {
+  border-style: solid;
+  background: linear-gradient(135deg, #1a1a2e, #16213e);
+}
+
+/* ---- Start Button ---- */
+.start-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.start-btn {
+  padding: 14px 32px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+  border: none;
+  border-radius: var(--radius);
+  color: white;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 200ms;
+  text-transform: uppercase;
+}
+.start-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px var(--accent-glow);
+}
+.start-btn:active { transform: translateY(0); }
+
+.status-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-sub);
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.status-dot.running {
+  background: var(--green);
+  animation: pulse-dot 1.5s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ---- Animations ---- */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent 30%, rgba(124,92,252,0.08) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- ============ HEADER ============ -->
+  <div class="header">
+    <div class="header-left">
+      <span class="logo">Chimera</span>
+    </div>
+    <button class="gear-btn" id="gearBtn" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- ============ TOP ROW: Trigger + Live Preview ============ -->
+  <div class="top-row">
+    <div class="trigger-group">
+      <label for="triggerWord">Trigger Word</label>
+      <input class="trigger-input" type="text" id="triggerWord" value="chrx" spellcheck="false">
+    </div>
+    <div class="live-preview">
+      <div class="live-preview-title">Live Preview</div>
+      <div class="live-preview-content">
+        <div class="live-preview-image" id="livePreviewImg">Step 0</div>
+        <div>
+          <div class="live-preview-prompt">
+            <span class="trigger-highlight" id="previewTrigger">chrx</span> person, studio photography, professional lighting, 85mm f/1.8
+          </div>
+          <div class="live-preview-meta">First-pass LoRA sample &bull; Generated every 100 steps</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ GEMINI ============ -->
+  <div class="section" id="geminiSection">
+    <div class="section-header">
+      Gemini
+      <span class="section-tag">Multi-View</span>
+    </div>
+    <div class="gemini-row">
+      <button class="upload-btn" id="uploadImageBtn">Upload Image</button>
+      <div class="views-grid">
+        <div class="view-slot">L</div>
+        <div class="view-slot">F</div>
+        <div class="view-slot">R</div>
+        <div class="view-slot">FC</div>
+        <div class="view-slot">B</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DATASET SYNTHESIZER ============ -->
+  <div class="section">
+    <div class="section-header">
+      Dataset Synthesizer
+      <span class="section-tag">Flux</span>
+    </div>
+    <div class="synth-grid">
+      <div class="synth-cell">
+        <div class="synth-cell-label">Synthesizer</div>
+        <select id="synthSelect">
+          <option value="klein_kv" selected>Klein 9B KV</option>
+          <option value="flux2_dev">Flux 2 DEV</option>
+        </select>
+      </div>
+      <div class="synth-cell">
+        <div class="synth-cell-label">Training Images</div>
+        <input type="number" value="50" min="10" max="300" id="numImagesInput">
+      </div>
+      <div class="synth-cell">
+        <div class="synth-cell-label">Base Model</div>
+        <select>
+          <option value="zimage" selected>Z-Image</option>
+          <option value="flux_krea">FLUX Krea</option>
+        </select>
+      </div>
+      <div class="synth-cell">
+        <div class="synth-cell-label">LoRA Rank</div>
+        <input type="number" value="32" min="4" max="128" step="4">
+      </div>
+      <div class="synth-cell">
+        <div class="synth-cell-label">Training Steps</div>
+        <input type="number" value="2500" min="250" max="10000" step="250">
+      </div>
+      <div class="synth-cell">
+        <div class="synth-cell-label">Learning Rate</div>
+        <input type="number" value="0.0001" step="0.00001">
+      </div>
+      <div class="synth-cell">
+        <div class="synth-cell-label">Inference Steps</div>
+        <input type="number" value="4" id="inferSteps">
+      </div>
+      <div class="synth-cell">
+        <div class="synth-cell-label">Batch Size</div>
+        <select>
+          <option value="1" selected>1</option>
+          <option value="2">2</option>
+          <option value="4">4</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Enhanced Mode Toggle -->
+    <div class="enhanced-toggle-row">
+      <span class="enhanced-label">Enhanced Mode</span>
+      <div class="toggle-track" id="enhancedToggle">
+        <div class="toggle-thumb"></div>
+      </div>
+    </div>
+
+    <!-- Enhanced Settings (hidden by default) -->
+    <div class="enhanced-settings" id="enhancedSettings">
+      <div class="section-header">Enhancement Settings</div>
+      <div class="enhanced-grid">
+        <div class="synth-cell">
+          <div class="synth-cell-label">LoRA Rank</div>
+          <input type="number" value="32" min="8" max="64">
+        </div>
+        <div class="synth-cell">
+          <div class="synth-cell-label">Learning Rate</div>
+          <input type="number" value="0.0001" step="0.00001">
+        </div>
+        <div class="synth-cell">
+          <div class="synth-cell-label">Denoise Strength</div>
+          <input type="number" value="0.40" min="0.20" max="0.60" step="0.05">
+        </div>
+        <div class="synth-cell">
+          <div class="synth-cell-label">Training Steps</div>
+          <input type="number" value="2500" min="500" max="5000" step="250">
+        </div>
+        <div class="synth-cell">
+          <div class="synth-cell-label">Inference Steps</div>
+          <input type="number" value="28" min="15" max="50">
+        </div>
+        <div class="synth-cell">
+          <div class="synth-cell-label">LoRA Weight</div>
+          <input type="number" value="0.75" min="0.5" max="1.0" step="0.05">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ START BUTTON ============ -->
+  <div class="start-row">
+    <button class="start-btn" id="startBtn">Generate Character LoRA</button>
+    <div class="status-chip">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Idle</span>
+    </div>
+  </div>
+
+  <!-- ============ SYNTHETIC IMAGES ============ -->
+  <div class="section images-section" id="imagesSection" style="display:none;">
+    <div class="section-header">Synthetic Images</div>
+    <div class="image-layout">
+      <!-- Left thumbnails -->
+      <div class="thumb-grid" id="gridLeft"></div>
+
+      <!-- Center hero preview — single card showing latest processed image -->
+      <div class="hero-preview">
+        <div class="hero-card" id="heroCard">
+          <div class="hero-card-image" id="heroImg">Waiting...</div>
+          <div class="hero-card-label">
+            <span class="hero-card-title hero-stage-gen" id="heroTitle">Latest Image</span>
+            <span class="hero-card-step" id="heroStep">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right thumbnails -->
+      <div class="thumb-grid" id="gridRight"></div>
+    </div>
+  </div>
+
+  <!-- ============ PROGRESS BARS ============ -->
+  <div class="section" id="progressSection" style="display:none;">
+    <div class="progress-section">
+      <!-- First Pass -->
+      <div class="progress-row" id="firstPassRow">
+        <div class="progress-label">
+          First Pass LoRA Training
+          <span class="progress-pct" id="fpPct">0 / 750</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill fill-purple" id="fpFill" style="width:0%"></div>
+          <div class="progress-scrubber" id="fpScrub" style="left:0%"></div>
+        </div>
+      </div>
+
+      <!-- Dataset Enhancer -->
+      <div class="progress-row" id="enhancerRow">
+        <div class="progress-label">
+          Dataset Enhancer
+          <span class="progress-pct" id="enhPct">0 / 50</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill fill-green" id="enhFill" style="width:0%"></div>
+          <div class="progress-scrubber" id="enhScrub" style="left:0%"></div>
+        </div>
+      </div>
+
+      <!-- Final LoRA Training -->
+      <div class="progress-row">
+        <div class="progress-label">
+          LoRA Training
+          <span class="progress-pct" id="loraPct">0 / 2500</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill fill-orange" id="loraFill" style="width:0%"></div>
+          <div class="progress-scrubber" id="loraScrub" style="left:0%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SAMPLE IMAGES ============ -->
+  <div class="section" id="samplesSection" style="display:none;">
+    <div class="section-header">Sample Images</div>
+    <div id="checkpointContainer">
+      <!-- Populated by JS -->
+    </div>
+  </div>
+
+</div>
+
+<!-- ============ SETTINGS SIDE PANEL ============ -->
+<div class="settings-overlay" id="settingsOverlay"></div>
+<div class="settings-panel" id="settingsPanel">
+  <div class="panel-title">
+    Settings
+    <button class="panel-close" id="panelClose">&times;</button>
+  </div>
+
+  <div class="panel-group">
+    <div class="panel-label">Nano Banana Pro API Key</div>
+    <input class="panel-input" type="password" placeholder="nbp_..." spellcheck="false">
+  </div>
+
+  <div class="panel-group">
+    <div class="panel-label">Hugging Face API Key</div>
+    <input class="panel-input" type="password" placeholder="hf_..." spellcheck="false">
+  </div>
+
+  <div class="panel-group">
+    <div class="panel-label">Upload Previous Gemini Views</div>
+    <button class="panel-upload-btn" id="uploadViewsBtn">Choose .zip file...</button>
+    <div class="panel-hint">Skip Gemini multi-view generation</div>
+  </div>
+
+  <div class="panel-group">
+    <div class="panel-label">Upload Previous Synthetic Dataset</div>
+    <button class="panel-upload-btn" id="uploadDatasetBtn">Choose .zip file...</button>
+    <div class="panel-hint">If chosen, removes the Gemini section</div>
+  </div>
+
+  <div class="panel-group">
+    <div class="panel-label">Sample Prompts</div>
+    <textarea class="panel-textarea" placeholder="a portrait of TRIGGER, looking at the camera&#10;TRIGGER walking in a park, natural lighting" spellcheck="false"></textarea>
+    <div class="panel-hint">One per line. TRIGGER is replaced with your trigger word.</div>
+  </div>
+</div>
+
+<!-- ============ JAVASCRIPT ============ -->
+<script>
+"use strict";
+
+// ---- Settings Panel ----
+const gearBtn = document.getElementById("gearBtn");
+const settingsOverlay = document.getElementById("settingsOverlay");
+const settingsPanel = document.getElementById("settingsPanel");
+const panelClose = document.getElementById("panelClose");
+
+function openPanel() {
+  settingsOverlay.classList.add("open");
+  settingsPanel.classList.add("open");
+}
+function closePanel() {
+  settingsOverlay.classList.remove("open");
+  settingsPanel.classList.remove("open");
+}
+
+gearBtn.addEventListener("click", openPanel);
+panelClose.addEventListener("click", closePanel);
+settingsOverlay.addEventListener("click", closePanel);
+
+// ---- Upload Dataset hides Gemini ----
+const uploadDatasetBtn = document.getElementById("uploadDatasetBtn");
+const geminiSection = document.getElementById("geminiSection");
+let datasetUploaded = false;
+
+uploadDatasetBtn.addEventListener("click", () => {
+  datasetUploaded = !datasetUploaded;
+  uploadDatasetBtn.classList.toggle("active", datasetUploaded);
+  uploadDatasetBtn.textContent = datasetUploaded ? "dataset_v2.zip (remove)" : "Choose .zip file...";
+  geminiSection.style.display = datasetUploaded ? "none" : "";
+});
+
+// ---- Upload Views ----
+const uploadViewsBtn = document.getElementById("uploadViewsBtn");
+let viewsUploaded = false;
+
+uploadViewsBtn.addEventListener("click", () => {
+  viewsUploaded = !viewsUploaded;
+  uploadViewsBtn.classList.toggle("active", viewsUploaded);
+  uploadViewsBtn.textContent = viewsUploaded ? "views_front_back.zip (remove)" : "Choose .zip file...";
+});
+
+// ---- Enhanced Mode Toggle ----
+const enhancedToggle = document.getElementById("enhancedToggle");
+const enhancedSettings = document.getElementById("enhancedSettings");
+let enhancedOn = false;
+
+enhancedToggle.addEventListener("click", () => {
+  enhancedOn = !enhancedOn;
+  enhancedToggle.classList.toggle("on", enhancedOn);
+  enhancedSettings.classList.toggle("visible", enhancedOn);
+});
+
+// ---- Synthesizer changes inference steps ----
+const synthSelect = document.getElementById("synthSelect");
+const inferSteps = document.getElementById("inferSteps");
+
+synthSelect.addEventListener("change", () => {
+  inferSteps.value = synthSelect.value === "klein_kv" ? 4 : 50;
+});
+
+// ---- Trigger word updates live preview ----
+const triggerInput = document.getElementById("triggerWord");
+const previewTrigger = document.getElementById("previewTrigger");
+
+triggerInput.addEventListener("input", () => {
+  previewTrigger.textContent = triggerInput.value || "chrx";
+});
+
+// ---- Mock Pipeline Simulation ----
+const startBtn = document.getElementById("startBtn");
+const statusDot = document.getElementById("statusDot");
+const statusText = document.getElementById("statusText");
+const imagesSection = document.getElementById("imagesSection");
+const progressSection = document.getElementById("progressSection");
+const samplesSection = document.getElementById("samplesSection");
+const firstPassRow = document.getElementById("firstPassRow");
+const enhancerRow = document.getElementById("enhancerRow");
+
+let running = false;
+
+function buildImageGrid(totalCells) {
+  const gridLeft = document.getElementById("gridLeft");
+  const gridRight = document.getElementById("gridRight");
+  gridLeft.innerHTML = "";
+  gridRight.innerHTML = "";
+
+  // Reset hero card
+  const heroCard = document.getElementById("heroCard");
+  heroCard.classList.remove("active", "pulse");
+  const heroImg = document.getElementById("heroImg");
+  heroImg.classList.remove("filled", "shimmer");
+  heroImg.textContent = "Waiting...";
+  document.getElementById("heroTitle").textContent = "Latest Image";
+  document.getElementById("heroTitle").className = "hero-card-title hero-stage-gen";
+  document.getElementById("heroStep").textContent = "--";
+
+  const half = Math.ceil(totalCells / 2);
+  for (let i = 0; i < half; i++) {
+    const cell = document.createElement("div");
+    cell.className = "img-cell";
+    cell.dataset.index = i;
+    gridLeft.appendChild(cell);
+  }
+  for (let i = half; i < totalCells; i++) {
+    const cell = document.createElement("div");
+    cell.className = "img-cell";
+    cell.dataset.index = i;
+    gridRight.appendChild(cell);
+  }
+}
+
+function buildCheckpoints() {
+  const container = document.getElementById("checkpointContainer");
+  container.innerHTML = "";
+
+  const steps = [0, 250, 500];
+  steps.forEach(step => {
+    const row = document.createElement("div");
+    row.className = "checkpoint-row";
+
+    const label = document.createElement("div");
+    label.className = "checkpoint-label";
+    const span = document.createElement("span");
+    span.textContent = "Checkpoint " + step;
+    label.appendChild(span);
+
+    if (step > 0) {
+      const dl = document.createElement("button");
+      dl.className = "checkpoint-dl";
+      dl.textContent = "Download";
+      dl.addEventListener("click", () => alert("Mock download for step " + step));
+      label.appendChild(dl);
+    }
+
+    row.appendChild(label);
+
+    const imgs = document.createElement("div");
+    imgs.className = "checkpoint-images";
+    for (let i = 0; i < 3; i++) {
+      const img = document.createElement("div");
+      img.className = "checkpoint-img" + (step > 0 ? " filled shimmer" : "");
+      imgs.appendChild(img);
+    }
+    row.appendChild(imgs);
+    container.appendChild(row);
+  });
+}
+
+function animateProgress(fillId, scrubId, pctId, total, duration, label) {
+  return new Promise(resolve => {
+    const fill = document.getElementById(fillId);
+    const scrub = document.getElementById(scrubId);
+    const pctEl = document.getElementById(pctId);
+    let current = 0;
+    const interval = duration / total;
+
+    const timer = setInterval(() => {
+      current++;
+      const pct = Math.min((current / total) * 100, 100);
+      fill.style.width = pct + "%";
+      scrub.style.left = pct + "%";
+      pctEl.textContent = current + " / " + total;
+      statusText.textContent = label + " " + current + "/" + total;
+
+      if (current >= total) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, interval);
+  });
+}
+
+function fillCells(count, delay) {
+  return new Promise(resolve => {
+    const cells = document.querySelectorAll(".img-cell");
+    const heroCard = document.getElementById("heroCard");
+    const heroImg = document.getElementById("heroImg");
+    const heroTitle = document.getElementById("heroTitle");
+    const heroStep = document.getElementById("heroStep");
+
+    let i = 0;
+    // Stages cycle sequentially: all generated first, then all upscaled, then all enhanced
+    const stageOrder = ["gen", "up", "enh"];
+    const stageLabels = { gen: "GEN", up: "2048", enh: "ENH" };
+    const stageNames = { gen: "Generating", up: "Upscaling", enh: "Enhancing" };
+    const stageTitles = { gen: "Generating...", up: "Upscaling...", enh: "Enhancing..." };
+    const stageClasses = { gen: "hero-stage-gen", up: "hero-stage-up", enh: "hero-stage-enh" };
+
+    const timer = setInterval(() => {
+      if (i >= count || i >= cells.length) {
+        clearInterval(timer);
+        resolve();
+        return;
+      }
+
+      // Determine which stage this image is in (sequential: gen → up → enh)
+      const stageIdx = i % 3;
+      const stage = stageOrder[stageIdx];
+
+      cells[i].classList.add("filled", "shimmer");
+
+      const badge = document.createElement("span");
+      badge.className = "cell-badge badge-" + stage;
+      badge.textContent = stageLabels[stage];
+      cells[i].appendChild(badge);
+
+      // Update the single hero card with latest image
+      heroCard.classList.add("active", "pulse");
+      heroImg.classList.add("filled", "shimmer");
+      heroImg.textContent = "#" + (i + 1);
+      heroTitle.textContent = stageTitles[stage];
+      heroTitle.className = "hero-card-title " + stageClasses[stage];
+      heroStep.textContent = "img " + (i + 1) + "/" + count;
+
+      statusText.textContent = stageNames[stage] + " image " + (i + 1) + "/" + count;
+      i++;
+    }, delay);
+  });
+}
+
+async function runMockPipeline() {
+  if (running) return;
+  running = true;
+
+  startBtn.disabled = true;
+  startBtn.style.opacity = "0.5";
+  statusDot.classList.add("running");
+  statusText.textContent = "Starting pipeline...";
+
+  // Show/hide enhanced rows
+  firstPassRow.style.display = enhancedOn ? "" : "none";
+  enhancerRow.style.display = enhancedOn ? "" : "none";
+
+  // Show sections
+  imagesSection.style.display = "";
+  progressSection.style.display = "";
+  samplesSection.style.display = "";
+
+  const numImages = parseInt(document.getElementById("numImagesInput").value) || 50;
+  const cellCount = Math.min(numImages, 32);
+  buildImageGrid(cellCount);
+  buildCheckpoints();
+  await fillCells(cellCount, 80);
+
+  // Step 2: Update live preview as training progresses
+  const liveImg = document.getElementById("livePreviewImg");
+
+  if (enhancedOn) {
+    // First pass
+    statusText.textContent = "First-pass training...";
+    await animateProgress("fpFill", "fpScrub", "fpPct", 750, 3000, "First pass");
+
+    // Enhancement
+    statusText.textContent = "Enhancing dataset...";
+    await animateProgress("enhFill", "enhScrub", "enhPct", numImages, 2000, "Enhancing");
+  }
+
+  // Final training
+  statusText.textContent = "Training LoRA...";
+  const totalSteps = 2500;
+  let step = 0;
+  const interval = 4000 / totalSteps;
+  await new Promise(resolve => {
+    const timer = setInterval(() => {
+      step++;
+      const pct = Math.min((step / totalSteps) * 100, 100);
+      document.getElementById("loraFill").style.width = pct + "%";
+      document.getElementById("loraScrub").style.left = pct + "%";
+      document.getElementById("loraPct").textContent = step + " / " + totalSteps;
+      statusText.textContent = "Training " + step + "/" + totalSteps;
+
+      // Update live preview at step milestones
+      if (step % 100 === 0) {
+        liveImg.textContent = "Step " + step;
+        liveImg.style.background = "linear-gradient(135deg, #1a1a2e, #16213e)";
+        liveImg.style.borderStyle = "solid";
+      }
+
+      if (step >= totalSteps) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, interval);
+  });
+
+  // Done
+  statusText.textContent = "Complete!";
+  statusDot.classList.remove("running");
+  statusDot.style.background = "var(--green)";
+  startBtn.disabled = false;
+  startBtn.style.opacity = "1";
+  running = false;
+}
+
+startBtn.addEventListener("click", runMockPipeline);
+</script>
+
+</body>
+</html>

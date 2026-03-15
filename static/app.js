@@ -74,6 +74,55 @@ function updateRecommendations(numImages) {
 }
 
 // ---------------------------------------------------------------------------
+// Hero card — single large preview of the latest processed image
+// ---------------------------------------------------------------------------
+
+function updateHeroCard(imageUrl, stage, index, total) {
+  const heroCard = document.getElementById("heroCard");
+  const heroImg = document.getElementById("heroImg");
+  const heroTitle = document.getElementById("heroTitle");
+  const heroStep = document.getElementById("heroStep");
+  if (!heroCard) return;
+
+  const stageConfig = {
+    gen:  { title: "Generating...",  cls: "hero-stage-gen" },
+    up:   { title: "Upscaling...",   cls: "hero-stage-up" },
+    enh:  { title: "Enhancing...",   cls: "hero-stage-enh" },
+  };
+  const cfg = stageConfig[stage] || stageConfig.gen;
+
+  heroCard.classList.add("active", "pulse");
+  heroTitle.textContent = cfg.title;
+  heroTitle.className = "hero-card-title " + cfg.cls;
+  heroStep.textContent = (index + 1) + " / " + total;
+
+  // Show the image — reuse existing <img> if present, else create one
+  let img = heroImg.querySelector("img");
+  if (!img) {
+    // Remove "Waiting..." text node
+    heroImg.textContent = "";
+    img = document.createElement("img");
+    img.alt = "latest image";
+    heroImg.appendChild(img);
+  }
+  img.src = imageUrl;
+}
+
+function resetHeroCard() {
+  const heroCard = document.getElementById("heroCard");
+  const heroImg = document.getElementById("heroImg");
+  const heroTitle = document.getElementById("heroTitle");
+  const heroStep = document.getElementById("heroStep");
+  if (!heroCard) return;
+
+  heroCard.classList.remove("active", "pulse");
+  heroImg.textContent = "Waiting...";
+  heroTitle.textContent = "Latest Image";
+  heroTitle.className = "hero-card-title hero-stage-gen";
+  heroStep.textContent = "--";
+}
+
+// ---------------------------------------------------------------------------
 // Synthetic grid initialisation
 // ---------------------------------------------------------------------------
 
@@ -200,8 +249,9 @@ function onSyntheticEvent(data, jobId) {
   const cell = document.querySelector(`.synthetic-cell[data-index="${data.index}"]`);
   if (!cell) return;
 
+  const imgUrl = data.url + "?t=" + Date.now();
   const img = document.createElement("img");
-  img.src = data.url + "?t=" + Date.now();
+  img.src = imgUrl;
   img.alt = `synthetic ${data.index + 1}`;
   img.loading = "lazy";
 
@@ -213,6 +263,9 @@ function onSyntheticEvent(data, jobId) {
   const loaded = document.querySelectorAll(".synthetic-cell.loaded").length;
   const total = document.querySelectorAll(".synthetic-cell").length;
   document.getElementById("syntheticCount").textContent = `${loaded} / ${total}`;
+
+  // Update hero card with latest generated image
+  updateHeroCard(imgUrl, "gen", data.index, total);
 
   // Show download button once all synthetic images are generated
   if (loaded >= total && jobId) {
@@ -275,8 +328,9 @@ function onUpscaledEvent(data) {
   cell.classList.add("has-comparison");
 
   // Update the displayed image to the upscaled version
+  const upscaledUrl = data.upscaled_url + "?t=" + Date.now();
   const img = cell.querySelector("img:not(.diffusion-preview-img)");
-  if (img) img.src = data.upscaled_url + "?t=" + Date.now();
+  if (img) img.src = upscaledUrl;
 
   // Add compare badge
   if (!cell.querySelector(".compare-badge")) {
@@ -285,6 +339,10 @@ function onUpscaledEvent(data) {
     badge.textContent = "2048px";
     cell.appendChild(badge);
   }
+
+  // Update hero card with latest upscaled image
+  const total = document.querySelectorAll(".synthetic-cell").length;
+  updateHeroCard(upscaledUrl, "up", data.index, total);
 }
 
 function onFirstPassProgress(data) {
@@ -316,8 +374,9 @@ function onEnhancedEvent(data) {
   cell.dataset.enhancedUrl = data.enhanced_url;
   cell.classList.add("has-comparison");
 
+  const enhancedUrl = data.enhanced_url + "?t=" + Date.now();
   const img = document.createElement("img");
-  img.src = data.enhanced_url + "?t=" + Date.now();
+  img.src = enhancedUrl;
   img.alt = "enhanced " + (data.index + 1);
   img.loading = "lazy";
   cell.appendChild(img);
@@ -329,6 +388,10 @@ function onEnhancedEvent(data) {
   cell.appendChild(badge);
 
   grid.appendChild(cell);
+
+  // Update hero card with latest enhanced image (scope count to enhancement grid only)
+  const enhTotal = document.querySelectorAll("#enhancementGrid .synthetic-cell").length;
+  updateHeroCard(enhancedUrl, "enh", data.index, enhTotal);
 }
 
 // ---------------------------------------------------------------------------
@@ -607,6 +670,14 @@ function onCompleteEvent(data, evtSource, startBtn) {
   document.getElementById("progressFill").style.width = "100%";
   document.getElementById("progressGlow").style.left = "100%";
 
+  // Stop hero card pulse animation on completion
+  const heroCard = document.getElementById("heroCard");
+  if (heroCard) heroCard.classList.remove("pulse");
+  const heroTitle = document.getElementById("heroTitle");
+  if (heroTitle) heroTitle.textContent = "Complete";
+  const heroStep = document.getElementById("heroStep");
+  if (heroStep) heroStep.textContent = "Done";
+
   startBtn.disabled = false;
   evtSource.close();
 
@@ -616,6 +687,13 @@ function onCompleteEvent(data, evtSource, startBtn) {
 function onErrorEvent(data, evtSource, startBtn) {
   setStatus(`Error: ${data.message}`, "error");
   console.error("[pipeline error]", data.message);
+
+  // Stop hero card animation on error
+  const heroCard = document.getElementById("heroCard");
+  if (heroCard) heroCard.classList.remove("pulse");
+  const heroTitle = document.getElementById("heroTitle");
+  if (heroTitle) heroTitle.textContent = "Error";
+
   startBtn.disabled = false;
   evtSource.close();
 }
@@ -986,6 +1064,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (opt && opt.dataset.count) numImages = parseInt(opt.dataset.count, 10);
     }
     initSyntheticGrid(numImages);
+    resetHeroCard();
     document.getElementById("syntheticCount").textContent = `0 / ${numImages}`;
 
     // Reset view placeholders
