@@ -1013,6 +1013,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (triggerInput) triggerInput.addEventListener("input", updatePreviewPrompt);
   if (samplePromptsArea) samplePromptsArea.addEventListener("input", updatePreviewPrompt);
+  updatePreviewPrompt();  // set initial state
 
   // Init grid with default 25 placeholders
   initSyntheticGrid(25);

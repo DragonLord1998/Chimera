@@ -1051,15 +1051,54 @@ def _run_pipeline(
                     return getattr(self._real, name)
 
             _fp_stop = threading.Event()
+            _fp_samples_dir = os.path.join(first_pass_output, first_pass_name, "samples")
+            _fp_num_prompts = len([params["sample_prompts"][0]] if params.get("sample_prompts") else [
+                "default1", "default2",
+            ])
 
             def _fp_watcher():
                 last = -1
+                seen_samples: set[str] = set()
+                pending_samples: dict[int, dict] = {}
                 while not _fp_stop.is_set():
                     time.sleep(2)
                     step = _fp_tqdm_step[0]
                     if step != last:
                         emit("first_pass_progress", {"step": step, "total": first_pass_steps})
                         last = step
+
+                    # Poll for sample images
+                    if os.path.isdir(_fp_samples_dir):
+                        sample_files = sorted(
+                            f for f in os.listdir(_fp_samples_dir)
+                            if (f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg"))
+                            and f not in seen_samples
+                        )
+                        for sf in sample_files:
+                            seen_samples.add(sf)
+                            url = f"/api/images/{job_id}/first_pass_output/{first_pass_name}/samples/{sf}"
+                            parsed_step = -1
+                            try:
+                                parts = sf.rsplit(".", 1)[0]
+                                step_part = parts.split("__")[1].split("_")[0]
+                                parsed_step = int(step_part)
+                            except (IndexError, ValueError):
+                                pass
+                            if parsed_step not in pending_samples:
+                                pending_samples[parsed_step] = {"urls": [], "first_seen": time.time()}
+                            pending_samples[parsed_step]["urls"].append(url)
+
+                    now = time.time()
+                    done_steps = []
+                    for s_step, info in sorted(pending_samples.items()):
+                        have_all = len(info["urls"]) >= _fp_num_prompts
+                        timed_out = (now - info["first_seen"]) > 30
+                        if have_all or timed_out:
+                            effective_step = s_step if s_step >= 0 else step
+                            emit("checkpoint", {"step": effective_step, "images": info["urls"]})
+                            done_steps.append(s_step)
+                    for s in done_steps:
+                        del pending_samples[s]
 
             fp_watcher_thread = threading.Thread(target=_fp_watcher, daemon=True,
                                                   name=f"fp-watcher-{job_id}")
