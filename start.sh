@@ -44,23 +44,39 @@ pip install --break-system-packages --no-cache-dir --force-reinstall scipy || tr
 
 # Patch AI Toolkit for transformers 5.x: ViTHybrid classes removed
 if [ -f "ai-toolkit/toolkit/custom_adapter.py" ]; then
-    sed -i 's/^from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification$/try:\n    from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification\nexcept ImportError:\n    ViTHybridImageProcessor = None\n    ViTHybridForImageClassification = None/' ai-toolkit/toolkit/custom_adapter.py 2>/dev/null
-    # If sed multiline fails, use python
     python3 -c "
+import re
+
 p = 'ai-toolkit/toolkit/custom_adapter.py'
-with open(p) as f: c = f.read()
-old = 'from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification'
-new = '''try:
+with open(p) as f:
+    c = f.read()
+
+target = 'from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification'
+replacement = '''try:
     from transformers import ViTHybridImageProcessor, ViTHybridForImageClassification
 except ImportError:
     ViTHybridImageProcessor = None
     ViTHybridForImageClassification = None'''
-if old in c and 'except ImportError' not in c.split(old)[0][-50:]:
-    c = c.replace(old, new)
-    with open(p, 'w') as f: f.write(c)
-    print('[Chimera] Patched AI Toolkit: ViTHybrid import')
+
+# Already correctly patched
+if 'try:\n    ' + target in c and 'except ImportError' in c:
+    print('[Chimera] AI Toolkit ViTHybrid: already patched')
 else:
-    print('[Chimera] AI Toolkit ViTHybrid: already patched or not found')
+    # Fix broken state: try: exists but import not indented, or missing except
+    broken = re.compile(r'try:\s*\n\s*' + re.escape(target) + r'(\s*\n(?!except).*)*', re.MULTILINE)
+    if broken.search(c):
+        c = broken.sub(replacement, c)
+        with open(p, 'w') as f:
+            f.write(c)
+        print('[Chimera] Patched AI Toolkit: fixed broken ViTHybrid try/except')
+    # Original unpatched: bare import line
+    elif target in c:
+        c = c.replace(target, replacement)
+        with open(p, 'w') as f:
+            f.write(c)
+        print('[Chimera] Patched AI Toolkit: ViTHybrid import')
+    else:
+        print('[Chimera] AI Toolkit ViTHybrid: import line not found')
 " || true
 fi
 
