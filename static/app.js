@@ -127,16 +127,26 @@ function resetHeroCard() {
 // ---------------------------------------------------------------------------
 
 function initSyntheticGrid(count) {
-  const grid = document.getElementById("syntheticGrid");
-  revokeBlobUrls(grid);
-  grid.innerHTML = "";
+  const gridLeft  = document.getElementById("gridLeft");
+  const gridRight = document.getElementById("gridRight");
+  if (gridLeft)  { revokeBlobUrls(gridLeft);  gridLeft.innerHTML  = ""; }
+  if (gridRight) { revokeBlobUrls(gridRight); gridRight.innerHTML = ""; }
+
+  // Reset hero card whenever the grid is re-initialised
+  resetHeroCard();
+
+  const half = Math.ceil(count / 2);
   for (let i = 0; i < count; i++) {
     const cell = document.createElement("div");
     cell.className = "synthetic-cell";
     cell.dataset.index = i;
     cell.dataset.idx = String(i + 1).padStart(2, "0");
     cell.style.setProperty("--i", i);
-    grid.appendChild(cell);
+    if (i < half) {
+      if (gridLeft)  gridLeft.appendChild(cell);
+    } else {
+      if (gridRight) gridRight.appendChild(cell);
+    }
   }
 }
 
@@ -943,11 +953,39 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // ---- Settings panel ----
+  const gearBtn        = document.getElementById("gearBtn");
+  const settingsOverlay = document.getElementById("settingsOverlay");
+  const settingsPanel  = document.getElementById("settingsPanel");
+  const panelClose     = document.getElementById("panelClose");
+
+  function openPanel()  {
+    settingsOverlay.classList.add("open");
+    settingsPanel.classList.add("open");
+  }
+  function closePanel() {
+    settingsOverlay.classList.remove("open");
+    settingsPanel.classList.remove("open");
+  }
+  if (gearBtn)         gearBtn.addEventListener("click", openPanel);
+  if (panelClose)      panelClose.addEventListener("click", closePanel);
+  if (settingsOverlay) settingsOverlay.addEventListener("click", closePanel);
+
+  // ---- Trigger word live preview ----
+  const triggerInput   = document.getElementById("triggerWord");
+  const previewTrigger = document.getElementById("previewTrigger");
+  if (triggerInput && previewTrigger) {
+    triggerInput.addEventListener("input", () => {
+      previewTrigger.textContent = triggerInput.value || "chrx";
+    });
+  }
+
   // Init grid with default 25 placeholders
   initSyntheticGrid(25);
 
   // Click handler for before/after (or triple) comparison on synthetic cells
-  document.getElementById("syntheticGrid").addEventListener("click", e => {
+  // Cells live in gridLeft and gridRight — use event delegation on a common ancestor
+  function handleSyntheticClick(e) {
     const cell = e.target.closest(".synthetic-cell");
     if (!cell) return;
     const hasEnhanced = cell.dataset.enhancedUrl && cell.dataset.originalUrl && cell.dataset.upscaledUrl;
@@ -956,7 +994,12 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (cell.classList.contains("has-comparison")) {
       openComparison(cell.dataset.originalUrl, cell.dataset.upscaledUrl);
     }
-  });
+  }
+
+  const gridLeftEl  = document.getElementById("gridLeft");
+  const gridRightEl = document.getElementById("gridRight");
+  if (gridLeftEl)  gridLeftEl.addEventListener("click",  handleSyntheticClick);
+  if (gridRightEl) gridRightEl.addEventListener("click", handleSyntheticClick);
 
   // Click handler for enhanced image comparison
   document.getElementById("enhancementGrid").addEventListener("click", e => {
