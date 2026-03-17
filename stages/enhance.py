@@ -84,7 +84,7 @@ class DatasetEnhancer:
         character_lora_path: str,
         srpo_lora_path: Optional[str] = None,
         lora_weight: float = 0.75,
-        srpo_weight: float = 0.8,
+        srpo_weight: float = 0.5,
     ) -> None:
         """Load the FLUX.1-dev img2img pipeline with LoRA adapters.
 

@@ -249,7 +249,7 @@ def start_pipeline():
         inference_steps = max(1, min(200, int(request.form.get("inference_steps", 50))))
         first_pass_rank = max(8, min(32, int(request.form.get("first_pass_rank", 16))))
         first_pass_steps = max(100, min(2500, int(request.form.get("first_pass_steps", 750))))
-        enhance_denoise = max(0.20, min(0.60, float(request.form.get("enhance_denoise", 0.40))))
+        enhance_denoise = max(0.20, min(0.60, float(request.form.get("enhance_denoise", 0.30))))
         enhance_steps = max(15, min(50, int(request.form.get("enhance_steps", 28))))
         enhance_lora_weight = max(0.5, min(1.0, float(request.form.get("enhance_lora_weight", 0.75))))
         batch_size = max(1, min(4, int(request.form.get("batch_size", 1))))
