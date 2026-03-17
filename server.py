@@ -246,7 +246,7 @@ def start_pipeline():
         learning_rate = max(1e-6, min(1e-2, float(request.form.get("learning_rate", 1e-4))))
         inference_steps = max(1, min(200, int(request.form.get("inference_steps", 50))))
         first_pass_rank = max(8, min(32, int(request.form.get("first_pass_rank", 16))))
-        first_pass_steps = max(500, min(2500, int(request.form.get("first_pass_steps", 750))))
+        first_pass_steps = max(100, min(2500, int(request.form.get("first_pass_steps", 750))))
         enhance_denoise = max(0.20, min(0.60, float(request.form.get("enhance_denoise", 0.40))))
         enhance_steps = max(15, min(50, int(request.form.get("enhance_steps", 28))))
         enhance_lora_weight = max(0.5, min(1.0, float(request.form.get("enhance_lora_weight", 0.75))))
