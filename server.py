@@ -1118,7 +1118,7 @@ def _run_pipeline(
                     resolution=1024,
                     batch_size=params.get("batch_size", 1),
                     save_every=first_pass_steps,  # only save final
-                    sample_every=100,
+                    sample_every=min(100, first_pass_steps - 1) if first_pass_steps > 1 else 1,
                     sample_prompts=[params["sample_prompts"][0]] if params.get("sample_prompts") else None,
                 )
             finally:
