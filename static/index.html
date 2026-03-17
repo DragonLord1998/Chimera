@@ -66,8 +66,18 @@
 
   <div class="panel-group">
     <div class="panel-label">Sample Prompts <span class="optional">(optional)</span></div>
-    <textarea class="panel-textarea" id="samplePrompts" placeholder="a portrait of TRIGGER, looking at the camera&#10;TRIGGER walking in a park, natural lighting" spellcheck="false"></textarea>
-    <div class="panel-hint">One per line. TRIGGER is replaced with your trigger word.</div>
+    <div class="prompt-list" id="promptList">
+      <div class="prompt-entry">
+        <input type="text" class="prompt-input" placeholder="a portrait of TRIGGER, looking at the camera" spellcheck="false">
+        <button type="button" class="prompt-remove-btn" title="Remove">&times;</button>
+      </div>
+      <div class="prompt-entry">
+        <input type="text" class="prompt-input" placeholder="TRIGGER walking in a park, natural lighting" spellcheck="false">
+        <button type="button" class="prompt-remove-btn" title="Remove">&times;</button>
+      </div>
+    </div>
+    <button type="button" class="prompt-add-btn" id="addPromptBtn">+ Add Prompt</button>
+    <div class="panel-hint">TRIGGER is replaced with your trigger word.</div>
   </div>
 </div>
 
@@ -93,15 +103,15 @@
       <label for="triggerWord">Trigger Word</label>
       <input class="trigger-input" type="text" id="triggerWord" value="chrx" spellcheck="false" autocomplete="off">
     </div>
-    <div class="live-preview">
+    <div class="live-preview" id="livePreviewBox">
       <div class="live-preview-title">Live Preview</div>
       <div class="live-preview-content">
-        <div class="live-preview-image" id="livePreviewImg">Step 0</div>
+        <div class="live-preview-image" id="livePreviewImg" title="Click to view all samples">Step 0</div>
         <div>
           <div class="live-preview-prompt" id="livePreviewPrompt">
             a portrait of <span class="trigger-highlight" id="previewTrigger">chrx</span>, looking at the camera, studio lighting
           </div>
-          <div class="live-preview-meta">Checkpoint sample &bull; First pass: 100 steps &bull; Final: 250 steps</div>
+          <div class="live-preview-meta" id="livePreviewMeta">Checkpoint sample &bull; First pass: 100 steps &bull; Final: 250 steps</div>
         </div>
       </div>
     </div>

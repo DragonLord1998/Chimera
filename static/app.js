@@ -157,8 +157,12 @@ function initSyntheticGrid(count) {
 function addCheckpointRow(step, imageUrls, downloadUrl) {
   const container = document.getElementById("checkpointContainer");
 
+  // Deduplicate: skip if a row for this step already exists
+  if (container.querySelector(`.checkpoint-row[data-step="${step}"]`)) return;
+
   const row = document.createElement("div");
   row.className = "checkpoint-row";
+  row.dataset.step = step;
   row.style.animation = "slide-in 0.4s ease";
 
   const label = document.createElement("div");
@@ -369,6 +373,202 @@ function onUpscaledEvent(data) {
   // Update hero card with latest upscaled image
   const total = document.querySelectorAll(".synthetic-cell").length;
   updateHeroCard(upscaledUrl, "up", data.index, total);
+}
+
+// ---------------------------------------------------------------------------
+// First-pass samples gallery
+// ---------------------------------------------------------------------------
+
+let firstPassSamples = [];
+
+function onFirstPassCheckpointEvent(data) {
+  if (!data.images || data.images.length === 0) return;
+
+  // Store each image with its step — deduplicate on reconnect replay
+  for (const url of data.images) {
+    const isDuplicate = firstPassSamples.some(s => s.step === data.step && s.url === url);
+    if (!isDuplicate) {
+      firstPassSamples.push({ step: data.step, url: url });
+    }
+  }
+
+  // Update live preview thumbnail with the latest sample
+  const livePreview = document.getElementById("livePreviewImg");
+  if (livePreview) {
+    let img = livePreview.querySelector("img");
+    if (!img) {
+      livePreview.textContent = "";
+      img = document.createElement("img");
+      img.alt = "first pass sample";
+      livePreview.appendChild(img);
+    }
+    img.src = data.images[data.images.length - 1];
+    livePreview.title = "Click to view all samples";
+
+    // Add clickable state
+    livePreview.classList.add("has-samples");
+
+    // Update or create badge
+    let badge = livePreview.querySelector(".live-preview-badge");
+    if (!badge) {
+      badge = document.createElement("div");
+      badge.className = "live-preview-badge";
+      livePreview.appendChild(badge);
+    }
+    badge.textContent = firstPassSamples.length;
+  }
+
+  // Update meta text
+  const meta = document.getElementById("livePreviewMeta");
+  if (meta) {
+    meta.textContent = `Step ${data.step.toLocaleString()} \u2022 ${firstPassSamples.length} sample(s) generated`;
+  }
+}
+
+function openFirstPassModal() {
+  if (firstPassSamples.length === 0) return;
+
+  // Remove any existing modal
+  closeFirstPassModal();
+
+  const overlay = document.createElement("div");
+  overlay.className = "fp-modal-overlay";
+  overlay.id = "fpModalOverlay";
+
+  const modal = document.createElement("div");
+  modal.className = "fp-modal";
+
+  // Header
+  const header = document.createElement("div");
+  header.className = "fp-modal-header";
+  header.innerHTML = `
+    <div>
+      <span class="fp-modal-title">First Pass Samples</span>
+      <span class="fp-modal-count">${firstPassSamples.length} image(s)</span>
+    </div>
+    <button class="fp-modal-close" id="fpModalClose">&times;</button>
+  `;
+  modal.appendChild(header);
+
+  // Body with grid
+  const body = document.createElement("div");
+  body.className = "fp-modal-body";
+
+  const grid = document.createElement("div");
+  grid.className = "fp-samples-grid";
+  grid.id = "fpSamplesGrid";
+
+  for (let i = 0; i < firstPassSamples.length; i++) {
+    grid.appendChild(_createFPSampleCard(firstPassSamples[i], i));
+  }
+
+  body.appendChild(grid);
+  modal.appendChild(body);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+
+  // Close handlers
+  document.getElementById("fpModalClose").addEventListener("click", closeFirstPassModal);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeFirstPassModal();
+  });
+
+  // ESC key
+  overlay._escHandler = (e) => {
+    if (e.key === "Escape") closeFirstPassModal();
+  };
+  document.addEventListener("keydown", overlay._escHandler);
+}
+
+function _createFPSampleCard(sample, index) {
+  const card = document.createElement("div");
+  card.className = "fp-sample-card";
+  card.dataset.index = index;
+
+  const imgWrap = document.createElement("div");
+  imgWrap.className = "fp-sample-img";
+  const img = document.createElement("img");
+  img.src = sample.url;
+  img.alt = `Step ${sample.step}`;
+  img.loading = "lazy";
+  imgWrap.appendChild(img);
+  card.appendChild(imgWrap);
+
+  const label = document.createElement("div");
+  label.className = "fp-sample-label";
+  label.innerHTML = `<div class="fp-sample-step">Step ${sample.step.toLocaleString()}</div>`;
+  card.appendChild(label);
+
+  // Click to fullscreen
+  card.addEventListener("click", () => {
+    openFullscreenViewer(sample.url, `Step ${sample.step.toLocaleString()}`);
+  });
+
+  return card;
+}
+
+function closeFirstPassModal() {
+  const overlay = document.getElementById("fpModalOverlay");
+  if (overlay) {
+    if (overlay._escHandler) {
+      document.removeEventListener("keydown", overlay._escHandler);
+    }
+    overlay.remove();
+  }
+}
+
+function updateFirstPassModalIfOpen() {
+  const grid = document.getElementById("fpSamplesGrid");
+  if (!grid) return; // modal not open
+
+  // Update count
+  const count = document.querySelector(".fp-modal-count");
+  if (count) count.textContent = `${firstPassSamples.length} image(s)`;
+
+  // Add any new cards
+  const existing = grid.querySelectorAll(".fp-sample-card").length;
+  for (let i = existing; i < firstPassSamples.length; i++) {
+    grid.appendChild(_createFPSampleCard(firstPassSamples[i], i));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Fullscreen image viewer
+// ---------------------------------------------------------------------------
+
+function openFullscreenViewer(imageUrl, label) {
+  closeFullscreenViewer();
+
+  const viewer = document.createElement("div");
+  viewer.className = "fullscreen-viewer";
+  viewer.id = "fullscreenViewer";
+
+  viewer.innerHTML = `
+    <div class="fullscreen-close">&times;</div>
+    <img src="${imageUrl}" alt="${label}">
+    <div class="fullscreen-step-label">${label}</div>
+  `;
+
+  document.body.appendChild(viewer);
+
+  // Close on click anywhere
+  viewer.addEventListener("click", closeFullscreenViewer);
+
+  // ESC key
+  viewer._escHandler = (e) => {
+    if (e.key === "Escape") closeFullscreenViewer();
+  };
+  document.addEventListener("keydown", viewer._escHandler);
+}
+
+function closeFullscreenViewer() {
+  const viewer = document.getElementById("fullscreenViewer");
+  if (viewer) {
+    if (viewer._escHandler) {
+      document.removeEventListener("keydown", viewer._escHandler);
+    }
+    viewer.remove();
+  }
 }
 
 function onFirstPassProgress(data) {
@@ -732,6 +932,11 @@ function connectToJob(jobId, startBtn) {
   startBtn.disabled = true;
   setStatus(`Running… job ${jobId}`, "running");
 
+  // Reset first-pass gallery for fresh replay
+  firstPassSamples = [];
+  closeFirstPassModal();
+  closeFullscreenViewer();
+
   const evtSource = new EventSource(`/api/stream/${jobId}`);
 
   evtSource.addEventListener("stage", e => {
@@ -764,6 +969,12 @@ function connectToJob(jobId, startBtn) {
 
   evtSource.addEventListener("first_pass_progress", e => {
     onFirstPassProgress(JSON.parse(e.data));
+  });
+
+  evtSource.addEventListener("first_pass_checkpoint", e => {
+    const data = JSON.parse(e.data);
+    onFirstPassCheckpointEvent(data);
+    updateFirstPassModalIfOpen();
   });
 
   evtSource.addEventListener("enhanced", e => {
@@ -807,7 +1018,7 @@ function connectToJob(jobId, startBtn) {
 
   [
     "stage", "view", "synthetic", "diffusion_preview", "upscaled",
-    "progress", "checkpoint", "first_pass_progress", "enhanced",
+    "progress", "checkpoint", "first_pass_progress", "first_pass_checkpoint", "enhanced",
     "enhance_progress", "complete", "heartbeat",
   ].forEach(
     name => evtSource.addEventListener(name, () => { lastActivity = Date.now(); })
@@ -996,15 +1207,67 @@ document.addEventListener("DOMContentLoaded", () => {
   const triggerInput      = document.getElementById("triggerWord");
   const previewTrigger    = document.getElementById("previewTrigger");
   const livePreviewPrompt = document.getElementById("livePreviewPrompt");
-  const samplePromptsArea = document.getElementById("samplePrompts");
+  const promptList        = document.getElementById("promptList");
+  const addPromptBtn      = document.getElementById("addPromptBtn");
+
+  function getPromptInputs() {
+    return promptList ? Array.from(promptList.querySelectorAll(".prompt-input")) : [];
+  }
+
+  function getSamplePromptsValue() {
+    return getPromptInputs().map(el => el.value.trim()).filter(Boolean).join("\n");
+  }
+
+  function createPromptEntry(placeholder) {
+    const entry = document.createElement("div");
+    entry.className = "prompt-entry";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "prompt-input";
+    input.spellcheck = false;
+    input.placeholder = placeholder || "Describe a scene with TRIGGER...";
+    input.addEventListener("input", updatePreviewPrompt);
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "prompt-remove-btn";
+    removeBtn.title = "Remove";
+    removeBtn.innerHTML = "&times;";
+    removeBtn.addEventListener("click", () => {
+      entry.remove();
+      updatePreviewPrompt();
+    });
+    entry.appendChild(input);
+    entry.appendChild(removeBtn);
+    return entry;
+  }
+
+  if (addPromptBtn && promptList) {
+    addPromptBtn.addEventListener("click", () => {
+      promptList.appendChild(createPromptEntry());
+      const inputs = getPromptInputs();
+      inputs[inputs.length - 1].focus();
+    });
+  }
+
+  // Wire up remove buttons on the initial HTML entries
+  if (promptList) {
+    promptList.querySelectorAll(".prompt-remove-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        btn.closest(".prompt-entry").remove();
+        updatePreviewPrompt();
+      });
+    });
+    promptList.querySelectorAll(".prompt-input").forEach(input => {
+      input.addEventListener("input", updatePreviewPrompt);
+    });
+  }
 
   function updatePreviewPrompt() {
     if (!livePreviewPrompt) return;
     const tw = (triggerInput && triggerInput.value) || "chrx";
-    const raw = samplePromptsArea ? samplePromptsArea.value.trim() : "";
-    const firstLine = raw.split("\n").find(l => l.trim()) || "";
-    if (firstLine) {
-      const prompt = firstLine.trim().replace(/TRIGGER/g, `<span class="trigger-highlight">${tw}</span>`);
+    const firstPrompt = getPromptInputs().map(el => el.value.trim()).find(Boolean) || "";
+    if (firstPrompt) {
+      const prompt = firstPrompt.replace(/TRIGGER/g, `<span class="trigger-highlight">${tw}</span>`);
       livePreviewPrompt.innerHTML = prompt;
     } else {
       livePreviewPrompt.innerHTML = `a portrait of <span class="trigger-highlight">${tw}</span>, looking at the camera, studio lighting`;
@@ -1012,8 +1275,17 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (triggerInput) triggerInput.addEventListener("input", updatePreviewPrompt);
-  if (samplePromptsArea) samplePromptsArea.addEventListener("input", updatePreviewPrompt);
   updatePreviewPrompt();  // set initial state
+
+  // ---- Live preview click → open first-pass samples modal ----
+  const livePreviewImgEl = document.getElementById("livePreviewImg");
+  if (livePreviewImgEl) {
+    livePreviewImgEl.addEventListener("click", () => {
+      if (firstPassSamples.length > 0) {
+        openFirstPassModal();
+      }
+    });
+  }
 
   // Init grid with default 25 placeholders
   initSyntheticGrid(25);
@@ -1157,9 +1429,20 @@ document.addEventListener("DOMContentLoaded", () => {
     // Reset checkpoint container
     document.getElementById("checkpointContainer").innerHTML = "";
 
-    // Reset live preview
+    // Reset live preview and first-pass samples gallery
+    firstPassSamples = [];
+    closeFirstPassModal();
+    closeFullscreenViewer();
     const livePreviewReset = document.getElementById("livePreviewImg");
-    if (livePreviewReset) { livePreviewReset.textContent = "Step 0"; livePreviewReset.title = ""; }
+    if (livePreviewReset) {
+      livePreviewReset.textContent = "Step 0";
+      livePreviewReset.title = "";
+      livePreviewReset.classList.remove("has-samples");
+      const oldBadge = livePreviewReset.querySelector(".live-preview-badge");
+      if (oldBadge) oldBadge.remove();
+    }
+    const metaReset = document.getElementById("livePreviewMeta");
+    if (metaReset) metaReset.textContent = "Checkpoint sample \u2022 First pass: 100 steps \u2022 Final: 250 steps";
 
     // Hide output section and download buttons
     document.getElementById("outputSection").hidden = true;
@@ -1222,7 +1505,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    const samplePromptsRaw = document.getElementById("samplePrompts").value.trim();
+    const samplePromptsRaw = getSamplePromptsValue();
     if (samplePromptsRaw) {
       formData.append("sample_prompts", samplePromptsRaw);
     }

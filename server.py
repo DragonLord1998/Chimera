@@ -1095,7 +1095,7 @@ def _run_pipeline(
                         timed_out = (now - info["first_seen"]) > 30
                         if have_all or timed_out:
                             effective_step = s_step if s_step >= 0 else step
-                            emit("checkpoint", {"step": effective_step, "images": info["urls"]})
+                            emit("first_pass_checkpoint", {"step": effective_step, "images": info["urls"]})
                             done_steps.append(s_step)
                     for s in done_steps:
                         del pending_samples[s]
