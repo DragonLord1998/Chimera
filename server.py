@@ -1131,6 +1131,16 @@ def _run_pipeline(
             first_pass_trainer.cleanup()
             del first_pass_trainer
             gc.collect()
+            torch.cuda.empty_cache()
+            gc.collect()
+
+            # Log VRAM state after first-pass cleanup
+            if torch.cuda.is_available():
+                free, total = torch.cuda.mem_get_info()
+                print(
+                    f"[Chimera] VRAM after first-pass cleanup: "
+                    f"{free / 1e9:.1f} GB free / {total / 1e9:.1f} GB total"
+                )
 
             # ----------------------------------------------------------
             # Stage 4 (enhanced): Dataset Enhancement with img2img

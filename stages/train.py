@@ -220,9 +220,45 @@ class LoRATrainer:
         """
         Release GPU memory after training.
 
-        Empties the CUDA cache and triggers a Python garbage-collection
-        cycle.  Safe to call even if training did not use CUDA.
+        AI Toolkit's ``run_job`` loads models into internal process objects
+        that persist after the call returns.  We clear these references
+        explicitly, then empty the CUDA cache and run garbage collection.
         """
+        # Force-clear AI Toolkit's internal job/process state which holds
+        # references to the model, optimizer, and training data on GPU.
+        try:
+            from toolkit.job import get_job
+            job_obj = get_job()
+            if job_obj is not None:
+                for proc in getattr(job_obj, "process", []):
+                    # Release model, optimizer, and any GPU tensors
+                    for attr in ("model", "sd", "pipeline", "network",
+                                 "optimizer", "lr_scheduler", "vae",
+                                 "text_encoder", "tokenizer", "unet",
+                                 "transformer"):
+                        if hasattr(proc, attr):
+                            try:
+                                obj = getattr(proc, attr)
+                                if hasattr(obj, "to"):
+                                    obj.to("cpu")
+                            except Exception:
+                                pass
+                            try:
+                                setattr(proc, attr, None)
+                            except Exception:
+                                pass
+                # Clear the job's process list
+                try:
+                    job_obj.process = []
+                except Exception:
+                    pass
+            print("[Chimera] LoRATrainer: AI Toolkit internal state cleared.")
+        except Exception as exc:
+            print(
+                f"[Chimera] LoRATrainer: WARNING — could not clear "
+                f"AI Toolkit state: {exc}"
+            )
+
         try:
             import torch
             if torch.cuda.is_available():
