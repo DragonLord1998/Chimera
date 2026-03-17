@@ -163,6 +163,8 @@ import uuid
 import zipfile as _zipfile
 from pathlib import Path
 
+import torch
+
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
 

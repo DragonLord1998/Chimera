@@ -228,7 +228,13 @@ class LoRATrainer:
         # references to the model, optimizer, and training data on GPU.
         try:
             from toolkit.job import get_job
-            job_obj = get_job()
+            import inspect
+            sig = inspect.signature(get_job)
+            if sig.parameters:
+                # Newer AI Toolkit requires config_path arg — pass empty string
+                job_obj = get_job("")
+            else:
+                job_obj = get_job()
             if job_obj is not None:
                 for proc in getattr(job_obj, "process", []):
                     # Release model, optimizer, and any GPU tensors
