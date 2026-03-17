@@ -226,39 +226,65 @@ class LoRATrainer:
         """
         # Force-clear AI Toolkit's internal job/process state which holds
         # references to the model, optimizer, and training data on GPU.
+        #
+        # Strategy: scan all loaded toolkit/jobs modules for objects that
+        # hold GPU model references, clear them, then remove the modules
+        # from sys.modules so Python can garbage-collect everything.
         try:
-            from toolkit.job import get_job
-            import inspect
-            sig = inspect.signature(get_job)
-            if sig.parameters:
-                # Newer AI Toolkit requires config_path arg — pass empty string
-                job_obj = get_job("")
-            else:
-                job_obj = get_job()
-            if job_obj is not None:
-                for proc in getattr(job_obj, "process", []):
-                    # Release model, optimizer, and any GPU tensors
-                    for attr in ("model", "sd", "pipeline", "network",
-                                 "optimizer", "lr_scheduler", "vae",
-                                 "text_encoder", "tokenizer", "unet",
-                                 "transformer"):
-                        if hasattr(proc, attr):
-                            try:
-                                obj = getattr(proc, attr)
-                                if hasattr(obj, "to"):
-                                    obj.to("cpu")
-                            except Exception:
-                                pass
-                            try:
-                                setattr(proc, attr, None)
-                            except Exception:
-                                pass
-                # Clear the job's process list
-                try:
-                    job_obj.process = []
-                except Exception:
-                    pass
-            print("[Chimera] LoRATrainer: AI Toolkit internal state cleared.")
+            import torch as _torch
+
+            _gpu_attrs = (
+                "model", "sd", "pipeline", "network", "optimizer",
+                "lr_scheduler", "vae", "text_encoder", "tokenizer",
+                "unet", "transformer",
+            )
+
+            # Walk loaded toolkit modules and clear GPU-resident attributes
+            toolkit_mods = [
+                m for name, m in sys.modules.items()
+                if m is not None
+                and (name.startswith("toolkit.") or name.startswith("jobs."))
+            ]
+            cleared = 0
+            for mod in toolkit_mods:
+                for var_name in list(vars(mod)):
+                    obj = getattr(mod, var_name, None)
+                    if obj is None:
+                        continue
+                    # Clear process lists on job-like objects
+                    procs = getattr(obj, "process", None)
+                    if isinstance(procs, list):
+                        for proc in procs:
+                            for attr in _gpu_attrs:
+                                ref = getattr(proc, attr, None)
+                                if ref is not None:
+                                    try:
+                                        if hasattr(ref, "to"):
+                                            ref.to("cpu")
+                                    except Exception:
+                                        pass
+                                    try:
+                                        setattr(proc, attr, None)
+                                        cleared += 1
+                                    except Exception:
+                                        pass
+                        try:
+                            obj.process = []
+                        except Exception:
+                            pass
+
+            # Remove toolkit modules from sys.modules to break all references
+            mod_names = [
+                k for k in sys.modules
+                if k.startswith("toolkit.") or k.startswith("jobs.")
+            ]
+            for name in mod_names:
+                sys.modules.pop(name, None)
+
+            print(
+                f"[Chimera] LoRATrainer: AI Toolkit state cleared "
+                f"({cleared} GPU refs freed, {len(mod_names)} modules unloaded)."
+            )
         except Exception as exc:
             print(
                 f"[Chimera] LoRATrainer: WARNING — could not clear "
