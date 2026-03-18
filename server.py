@@ -1069,6 +1069,10 @@ def _run_pipeline(
                         ).images[0]
                         reg_img_path = os.path.join(reg_dir, f"reg_{reg_idx:03d}.png")
                         reg_result.save(reg_img_path, format="PNG")
+                        emit("reg_image", {
+                            "index": reg_idx,
+                            "url": f"/api/images/{job_id}/regularization/reg_{reg_idx:03d}.png",
+                        })
                         # Caption each reg image with just the class word
                         reg_caption_path = os.path.join(reg_dir, f"reg_{reg_idx:03d}.txt")
                         Path(reg_caption_path).write_text(reg_prompt, encoding="utf-8")

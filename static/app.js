@@ -1230,9 +1230,30 @@ function connectToJob(jobId, startBtn) {
     onIdentityComplete(JSON.parse(e.data));
   });
 
+  evtSource.addEventListener("reg_image", e => {
+    const data = JSON.parse(e.data);
+    lastActivity = Date.now();
+    const section = document.getElementById("sectionRegularization");
+    if (section) section.style.display = "";
+    const grid = document.getElementById("regGrid");
+    if (grid) {
+      const img = document.createElement("img");
+      img.src = data.url + "?t=" + Date.now();
+      img.alt = `reg ${data.index}`;
+      img.loading = "lazy";
+      grid.appendChild(img);
+    }
+    const regText = document.getElementById("regProgressText");
+    if (regText) regText.textContent = `${data.index + 1} / 25`;
+  });
+
   evtSource.addEventListener("reg_progress", e => {
     const data = JSON.parse(e.data);
     lastActivity = Date.now();
+    const section = document.getElementById("sectionRegularization");
+    if (section) section.style.display = "";
+    const regText = document.getElementById("regProgressText");
+    if (regText) regText.textContent = `${data.current} / ${data.total}`;
     const stageEl = document.getElementById("stageMessage");
     if (stageEl) {
       stageEl.textContent = `Generating regularization image ${data.current}/${data.total}...`;
@@ -1282,7 +1303,7 @@ function connectToJob(jobId, startBtn) {
     "stage", "view", "synthetic", "diffusion_preview", "upscaled",
     "progress", "checkpoint", "enhanced",
     "enhance_progress", "identity_progress", "identity_checkpoint", "identity_complete",
-    "reg_progress", "complete", "heartbeat",
+    "reg_progress", "reg_image", "complete", "heartbeat",
   ].forEach(
     name => evtSource.addEventListener(name, () => { lastActivity = Date.now(); })
   );

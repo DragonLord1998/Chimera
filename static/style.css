@@ -603,6 +603,23 @@ body {
   flex: 1;
 }
 
+/* Regularization images grid — small thumbnails */
+.reg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.reg-grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  opacity: 0;
+  animation: fade-in 0.4s ease forwards;
+}
+
 .view-card {
   flex: 1;
   aspect-ratio: 3/4;
