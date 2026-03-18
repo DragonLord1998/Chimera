@@ -1238,9 +1238,11 @@ function connectToJob(jobId, startBtn) {
     const grid = document.getElementById("regGrid");
     if (grid) {
       const img = document.createElement("img");
-      img.src = data.url + "?t=" + Date.now();
+      const imgUrl = data.url + "?t=" + Date.now();
+      img.src = imgUrl;
       img.alt = `reg ${data.index}`;
       img.loading = "lazy";
+      img.onclick = () => openFullscreenOverlay(imgUrl, "view", {});
       grid.appendChild(img);
     }
     const regText = document.getElementById("regProgressText");
