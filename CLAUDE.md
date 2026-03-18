@@ -1,10 +1,20 @@
 # Chimera — Character LoRA Creator
 
+## IMPORTANT: Knowledge Base
+
+**ALWAYS read `KNOWLEDGE.md` at the start of every session.** It contains hard-won lessons, architectural decisions, past mistakes, and community research findings. After every significant change, mistake, discovery, or decision — **update KNOWLEDGE.md**. It is your project journal and institutional memory.
+
+Key sections to reference:
+- **Mistakes Made** — don't repeat them (especially: never change architectural decisions without permission, watch for RAM vs VRAM limits, clear latent caches after image modifications)
+- **Captioning Philosophy** — "caption what you don't want the LoRA to learn", always preserve expressions
+- **SRPO Model** — hybrid directory approach, RAM constraints, `low_cpu_mem_usage=True`
+- **AI Toolkit Quirks** — latent caching, sampling crashes, tokenizer patches
+
 ## Project Overview
 
 Chimera is a standalone Python/Flask web application that trains a character LoRA from a single input image. The full pipeline is automated: Input Image → Gemini Multi-View Generation → Synthesizer (Flux 2 DEV or Klein 9B KV) → SeedVR2 Upscale → Florence 2 Captioning → LoRA Training.
 
-**Target hardware**: NVIDIA RTX PRO 6000 (96 GB VRAM) on RunPod.
+**Target hardware**: NVIDIA RTX PRO 6000 (96 GB VRAM), 46.57 GB system RAM on RunPod.
 
 ## Architecture
 
