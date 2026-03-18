@@ -595,6 +595,14 @@ body {
   flex: 1;
 }
 
+/* Enhanced views grid — 10 slots in 2 rows of 5 */
+.views-grid-enhanced {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  flex: 1;
+}
+
 .view-card {
   flex: 1;
   aspect-ratio: 3/4;
@@ -1970,6 +1978,7 @@ body {
 @media (max-width: 600px) {
   .top-row { grid-template-columns: 1fr; }
   .views-grid { flex-wrap: wrap; }
+  .views-grid-enhanced { grid-template-columns: repeat(3, 1fr); }
   .view-card { min-width: calc(33% - 8px); }
   .synth-grid { grid-template-columns: repeat(2, 1fr); }
   .settings-panel { width: 100%; right: -105%; }

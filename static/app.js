@@ -250,19 +250,21 @@ function onStageEvent(data) {
   console.log("[stage]", data);
 }
 
-// Map v0.2 view names to the 5 available UI slots (null = no slot, still counted)
+// Map view names to UI element IDs.
+// v0.2 enhanced mode uses 10 dedicated slots; legacy uses 5.
 const VIEW_NAME_TO_SLOT = {
-  "front_face_closeup":         "viewFace",
-  "front_midbody":              "viewFront",
-  "front_fullbody":             null,
-  "left_34_midbody":            "viewLeft",
-  "right_profile_closeup":      "viewRight",
-  "right_34_midbody":           null,
-  "left_fullbody_walking":      null,
-  "front_midbody_laughing":     null,
-  "rear_34_midbody":            "viewBack",
-  "left_34_closeup_dramatic":   null,
-  // Legacy names
+  // v0.2 enhanced mode — 10 slots
+  "front_face_closeup":         "viewFrontFaceCloseup",
+  "front_midbody":              "viewFrontMidbody",
+  "front_fullbody":             "viewFrontFullbody",
+  "left_34_midbody":            "viewLeft34Midbody",
+  "right_profile_closeup":      "viewRightProfileCloseup",
+  "right_34_midbody":           "viewRight34Midbody",
+  "left_fullbody_walking":      "viewLeftFullbodyWalking",
+  "front_midbody_laughing":     "viewFrontMidbodyLaughing",
+  "rear_34_midbody":            "viewRear34Midbody",
+  "left_34_closeup_dramatic":   "viewLeft34CloseupDramatic",
+  // Legacy 5 slots
   "left":  "viewLeft",
   "front": "viewFront",
   "right": "viewRight",
@@ -297,9 +299,12 @@ function onViewEvent(data, jobId) {
     }
   }
 
-  // Show download button once all 5 slots are filled
+  // Show download button once enough slots are filled (5 legacy or 10 enhanced)
   const loaded = document.querySelectorAll(".view-placeholder.loaded").length;
-  if (loaded >= 5 && jobId) {
+  const enhancedOn = document.getElementById("viewsGridEnhanced") &&
+                     document.getElementById("viewsGridEnhanced").style.display !== "none";
+  const threshold = enhancedOn ? 10 : 5;
+  if (loaded >= threshold && jobId) {
     const dlBtn = document.getElementById("downloadViewsBtn");
     dlBtn.href = `/api/download-views/${jobId}`;
     dlBtn.hidden = false;
@@ -1172,6 +1177,16 @@ function connectToJob(jobId, startBtn) {
   closeFirstPassModal();
   closeFullscreenViewer();
 
+  // Show correct views grid based on enhanced mode toggle
+  const enhToggle = document.getElementById("enhancedMode");
+  const vgLegacy = document.getElementById("viewsGrid");
+  const vgEnhanced = document.getElementById("viewsGridEnhanced");
+  if (enhToggle && vgLegacy && vgEnhanced) {
+    const enhanced = enhToggle.checked;
+    vgLegacy.style.display = enhanced ? "none" : "";
+    vgEnhanced.style.display = enhanced ? "" : "none";
+  }
+
   const evtSource = new EventSource(`/api/stream/${jobId}`);
 
   evtSource.addEventListener("stage", e => {
@@ -1595,8 +1610,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const enhancementSettings = document.getElementById("enhancementSettings");
 
   if (enhancedModeToggle && enhancementSettings) {
+    const viewsGrid = document.getElementById("viewsGrid");
+    const viewsGridEnhanced = document.getElementById("viewsGridEnhanced");
     enhancedModeToggle.addEventListener("change", () => {
-      enhancementSettings.style.display = enhancedModeToggle.checked ? "" : "none";
+      const enhanced = enhancedModeToggle.checked;
+      enhancementSettings.style.display = enhanced ? "" : "none";
+      if (viewsGrid) viewsGrid.style.display = enhanced ? "none" : "";
+      if (viewsGridEnhanced) viewsGridEnhanced.style.display = enhanced ? "" : "none";
     });
   }
 
