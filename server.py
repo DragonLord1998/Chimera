@@ -1038,21 +1038,12 @@ def _run_pipeline(
                 try:
                     from diffusers import FluxPipeline
 
-                    print("[Chimera] Loading SRPO base model for regularization image generation...")
+                    print("[Chimera] Loading SRPO hybrid model for regularization image generation...")
                     reg_pipe = FluxPipeline.from_pretrained(
-                        "black-forest-labs/FLUX.1-dev",
+                        srpo_hybrid_dir,
                         torch_dtype=torch.bfloat16,
                         token=params.get("hf_token"),
                     )
-
-                    # Replace transformer weights with SRPO
-                    from safetensors.torch import load_file as _st_load
-                    srpo_sd = _st_load(srpo_safetensors_path)
-                    reg_pipe.transformer.load_state_dict(srpo_sd, strict=True)
-                    del srpo_sd
-                    gc.collect()
-                    torch.cuda.empty_cache()
-
                     reg_pipe.enable_model_cpu_offload()
 
                     for reg_idx, reg_prompt in enumerate(_REG_PROMPTS[:num_reg_images]):
@@ -1395,7 +1386,7 @@ def _run_pipeline(
 
             enhancer.load_model(
                 character_lora_path=identity_lora_path,
-                srpo_model_path=srpo_safetensors_path,
+                srpo_model_path=srpo_hybrid_dir,
                 lora_weight=params.get("enhance_lora_weight", 0.75),
             )
 
