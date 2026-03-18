@@ -91,16 +91,19 @@ MODEL_REGISTRY: dict[str, dict] = {
         "size_hint": "~29 GB",
         "gated": True,
     },
-    # --- SRPO LoRA (photorealism enhancement, v0.2) ---
-    # Tencent's Semantic Relative Preference Optimization fine-tune of FLUX.1-dev.
-    # Used during dataset enhancement to add photorealistic detail.
+    # --- SRPO Base Model (photorealism enhancement) ---
+    # Tencent's Semantic Relative Preference Optimization full fine-tune of FLUX.1-dev.
+    # This is a complete transformer replacement (NOT a LoRA) — architecturally identical
+    # to FLUX.1-dev but with different weights trained for photorealism.
+    # Used during dataset enhancement as the img2img pipeline base.
     # Downloaded on demand when user enables Enhanced Mode.
-    "srpo_lora": {
-        "repo_id": "Alissonerdx/flux.1-dev-SRPO-LoRas",
-        "subdir": "srpo_lora",
-        "description": "FLUX.1-dev SRPO LoRA for photorealism (Tencent, ranks 8-128)",
-        "snapshot": True,
-        "size_hint": "~1.5 GB",
+    "srpo_base": {
+        "repo_id": "rockerBOO/flux.1-dev-SRPO",
+        "subdir": "srpo_base",
+        "filename": "flux.1-dev-SRPO-bf16.safetensors",
+        "description": "FLUX.1-dev SRPO full transformer (rockerBOO, BF16, 23.8 GB)",
+        "snapshot": False,
+        "size_hint": "~23.8 GB",
     },
 }
 

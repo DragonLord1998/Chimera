@@ -247,16 +247,21 @@ def start_pipeline():
         lora_steps = max(100, min(10000, int(request.form.get("lora_steps", 1500))))
         learning_rate = max(1e-6, min(1e-2, float(request.form.get("learning_rate", 1e-4))))
         inference_steps = max(1, min(200, int(request.form.get("inference_steps", 50))))
-        first_pass_rank = max(8, min(32, int(request.form.get("first_pass_rank", 16))))
-        first_pass_steps = max(100, min(2500, int(request.form.get("first_pass_steps", 750))))
-        enhance_denoise = max(0.20, min(0.60, float(request.form.get("enhance_denoise", 0.30))))
+        # v0.2: identity LoRA params (accept old names for backward compat)
+        identity_rank = max(8, min(64, int(request.form.get("identity_rank",
+                            request.form.get("first_pass_rank", 32)))))
+        identity_steps = max(500, min(2500, int(request.form.get("identity_steps",
+                             request.form.get("first_pass_steps", 750)))))
+        enhance_denoise = max(0.15, min(0.50, float(request.form.get("enhance_denoise", 0.30))))
         enhance_steps = max(15, min(50, int(request.form.get("enhance_steps", 28))))
         enhance_lora_weight = max(0.5, min(1.0, float(request.form.get("enhance_lora_weight", 0.75))))
         batch_size = max(1, min(4, int(request.form.get("batch_size", 1))))
     except (ValueError, TypeError) as e:
         return jsonify({"error": f"Invalid numeric parameter: {e}"}), 400
 
-    enhanced_mode = request.form.get("enhanced_mode", "").lower() in ("true", "1", "on")
+    # v0.2: enhanced_mode defaults to False
+    enhanced_mode_raw = request.form.get("enhanced_mode", "false").lower()
+    enhanced_mode = enhanced_mode_raw in ("true", "1", "on")
     recaption_after_enhance = request.form.get("recaption_after_enhance", "").lower() in ("true", "1", "on")
 
     base_model = request.form.get("base_model", "zimage").strip()
@@ -280,8 +285,8 @@ def start_pipeline():
         "sample_prompts": None,
         "batch_size": batch_size,
         "enhanced_mode": enhanced_mode,
-        "first_pass_rank": first_pass_rank,
-        "first_pass_steps": first_pass_steps,
+        "identity_rank": identity_rank,
+        "identity_steps": identity_steps,
         "enhance_denoise": enhance_denoise,
         "enhance_steps": enhance_steps,
         "enhance_lora_weight": enhance_lora_weight,
@@ -528,6 +533,45 @@ def download_checkpoint(job_id: str, step: int):
 
 
 # ---------------------------------------------------------------------------
+# API: caption for a dataset image
+# ---------------------------------------------------------------------------
+
+
+@app.route("/api/caption/<job_id>/<image_name>")
+def get_caption(job_id: str, image_name: str):
+    """Return the .txt caption for a given image in the dataset."""
+    _validate_job_id(job_id)
+    # Validate image_name is a safe filename (no path separators or traversal)
+    if not image_name or '/' in image_name or '\\' in image_name or '..' in image_name:
+        abort(400, description="Invalid image name")
+    if not _re.match(r'^[\w.\-]+$', image_name):
+        abort(400, description="Invalid image name")
+    dataset_dir = os.path.join(JOBS_DIR, job_id, "dataset")
+    if not os.path.isdir(dataset_dir):
+        return jsonify({"error": "No dataset found"}), 404
+
+    # Strip image extension and look for .txt sidecar
+    stem = os.path.splitext(image_name)[0]
+    txt_path = os.path.join(dataset_dir, f"{stem}.txt")
+
+    # Validate path doesn't escape dataset_dir
+    real_txt = os.path.realpath(txt_path)
+    real_dataset = os.path.realpath(dataset_dir)
+    if not real_txt.startswith(real_dataset + os.sep):
+        abort(403)
+
+    if not os.path.isfile(txt_path):
+        return jsonify({"error": "Caption not found"}), 404
+
+    try:
+        caption = Path(txt_path).read_text(encoding="utf-8").strip()
+    except Exception:
+        return jsonify({"error": "Could not read caption"}), 500
+
+    return jsonify({"caption": caption})
+
+
+# ---------------------------------------------------------------------------
 # API: download views as zip
 # ---------------------------------------------------------------------------
 
@@ -679,6 +723,8 @@ def _run_pipeline(
 
         trigger = _re.sub(r'[^a-zA-Z0-9_]', '', params["trigger_word"]) or "chrx"
         output_name = f"{trigger}_lora"
+        identity_lora_path = None  # set by identity training when enhanced_mode
+        srpo_safetensors_path = None  # set by model download when enhanced_mode
 
         # ------------------------------------------------------------------
         # Stage 0 — Model download
@@ -691,6 +737,7 @@ def _run_pipeline(
         # Download models based on selected base model
         base_model = params.get("base_model", "zimage")
         synthesizer_choice = params.get("synthesizer", "flux2_dev")
+        enhanced_mode = params.get("enhanced_mode", False)
 
         if base_model == "flux_krea":
             # Flux Krea only needs its own model + Florence 2 for captioning
@@ -705,6 +752,47 @@ def _run_pipeline(
             if not mm.is_model_ready("flux2_klein_kv"):
                 stage_msg(0, "Downloading FLUX.2 Klein 9B KV model (~29 GB)...")
                 mm._download_with_retry("flux2_klein_kv")
+
+        # v0.2: Download SRPO base model when enhanced_mode is enabled
+        if enhanced_mode:
+            if not mm.is_model_ready("srpo_base"):
+                stage_msg(0, "Downloading SRPO base model for identity training + enhancement (~23.8 GB)...")
+                mm._download_with_retry("srpo_base")
+            srpo_safetensors_path = mm.get_model_path("srpo_base")
+
+            # Build hybrid model directory: FLUX.1-dev structure + SRPO transformer.
+            # SRPO is architecturally identical to FLUX.1-dev (same VAE, tokenizer,
+            # scheduler, text encoders) — only the transformer weights differ.
+            # AI Toolkit needs a full model directory, not a raw .safetensors file.
+            import huggingface_hub as _hfhub_dl
+            srpo_hybrid_dir = os.path.join(MODELS_DIR, "srpo_hybrid")
+            if not os.path.isdir(os.path.join(srpo_hybrid_dir, "transformer")):
+                stage_msg(0, "Building SRPO hybrid model directory (FLUX.1-dev structure + SRPO transformer)...")
+                flux_dev_cache = _hfhub_dl.snapshot_download(
+                    "black-forest-labs/FLUX.1-dev",
+                    token=params.get("hf_token"),
+                )
+                os.makedirs(srpo_hybrid_dir, exist_ok=True)
+                # Symlink all FLUX.1-dev components except transformer
+                for item in os.listdir(flux_dev_cache):
+                    src = os.path.join(flux_dev_cache, item)
+                    dst = os.path.join(srpo_hybrid_dir, item)
+                    if item == "transformer":
+                        continue
+                    if not os.path.exists(dst):
+                        os.symlink(src, dst)
+                # Create transformer dir with SRPO weights + FLUX.1-dev config
+                transformer_dir = os.path.join(srpo_hybrid_dir, "transformer")
+                os.makedirs(transformer_dir, exist_ok=True)
+                flux_tf_config = os.path.join(flux_dev_cache, "transformer", "config.json")
+                if os.path.isfile(flux_tf_config):
+                    dst_cfg = os.path.join(transformer_dir, "config.json")
+                    if not os.path.exists(dst_cfg):
+                        os.symlink(flux_tf_config, dst_cfg)
+                srpo_tf_dst = os.path.join(transformer_dir, "diffusion_pytorch_model.safetensors")
+                if not os.path.exists(srpo_tf_dst):
+                    os.symlink(srpo_safetensors_path, srpo_tf_dst)
+                print(f"[Chimera] SRPO hybrid model directory ready at {srpo_hybrid_dir}")
 
         # ------------------------------------------------------------------
         # Fast path: existing dataset from a previous job — symlink, skip to training
@@ -813,20 +901,27 @@ def _run_pipeline(
             # ------------------------------------------------------------------
             # Stage 1 — Multi-view generation (Gemini) or extract from zip
             # ------------------------------------------------------------------
+            # v0.2: 10 views when enhanced_mode, 5 legacy views otherwise
+            _V02_VIEW_NAMES = [
+                "front_face_closeup", "front_midbody", "front_fullbody",
+                "left_34_midbody", "right_profile_closeup", "right_34_midbody",
+                "left_fullbody_walking", "front_midbody_laughing",
+                "rear_34_midbody", "left_34_closeup_dramatic",
+            ]
+            _LEGACY_VIEW_NAMES = ["left", "front", "right", "face", "back"]
+            view_names = _V02_VIEW_NAMES if enhanced_mode else _LEGACY_VIEW_NAMES
+
             view_paths: list[str] = []
             view_images: list = []
-            view_names = ["left", "front", "right", "face", "back"]
 
             if views_zip_path and os.path.isfile(views_zip_path):
                 stage_msg(1, "Extracting uploaded multi-view images...")
                 _safe_extract_zip(views_zip_path, stage1_dir)
 
-                # Find view images — accept left/front/right.png or any 3 images
+                # Find view images — accept named .png or any images
                 for vn in view_names:
                     candidate = os.path.join(stage1_dir, f"{vn}.png")
-                    if not os.path.isfile(candidate):
-                        candidate = None
-                    if candidate and os.path.isfile(candidate):
+                    if os.path.isfile(candidate):
                         view_paths.append(candidate)
                         view_images.append(Image.open(candidate).convert("RGB"))
                         emit("view", {
@@ -842,7 +937,7 @@ def _run_pipeline(
                         f for f in os.listdir(stage1_dir)
                         if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))
                     ])
-                    for i, fname in enumerate(all_imgs[:5]):
+                    for i, fname in enumerate(all_imgs[:len(view_names)]):
                         vn = view_names[i] if i < len(view_names) else f"view{i}"
                         src = os.path.join(stage1_dir, fname)
                         dst = os.path.join(stage1_dir, f"{vn}.png")
@@ -862,32 +957,284 @@ def _run_pipeline(
                 stage_msg(1, "Multi-view images loaded from zip.")
 
             else:
-                stage_msg(1, "Generating multi-view character images with Gemini...")
+                num_views = 10 if enhanced_mode else 5
+                stage_msg(1, f"Generating {num_views} multi-view character images with Gemini...")
                 from stages.multiview import MultiViewGenerator
 
                 pil_input = Image.open(image_path).convert("RGB")
                 mv = MultiViewGenerator(api_key=params["gemini_key"])
 
-                resized = MultiViewGenerator._resize(pil_input)
-
-                for view_name, prompt in MultiViewGenerator.VIEWS.items():
-                    stage_msg(1, f"Generating {view_name} view...")
-                    generated = mv._generate_view_with_retry(resized, prompt, view_name)
-                    path = os.path.join(stage1_dir, f"{view_name}.png")
-                    generated.save(path, format="PNG")
-                    view_paths.append(path)
-                    view_images.append(generated)
+                def _gemini_callback(vname: str, vpath: str) -> None:
                     emit("view", {
-                        "position": view_name,
-                        "url": f"/api/images/{job_id}/stage1/{view_name}.png",
+                        "position": vname,
+                        "url": f"/api/images/{job_id}/stage1/{os.path.basename(vpath)}",
                     })
+
+                view_paths, view_images = mv.generate_views(
+                    image=pil_input,
+                    output_dir=stage1_dir,
+                    callback=_gemini_callback,
+                )
+
+                # In legacy mode (5 views), only use the first 5
+                if not enhanced_mode and len(view_paths) > 5:
+                    view_paths = view_paths[:5]
+                    view_images = view_images[:5]
 
                 pil_input.close()
 
             # ------------------------------------------------------------------
-            # Stage 2 — Dataset synthesis (Flux 2 DEV or Klein 9B KV)
+            # Stage 1a — Caption Gemini images with Florence 2 (enhanced_mode)
+            # ------------------------------------------------------------------
+            if enhanced_mode:
+                stage_msg(2, f"Captioning {len(view_paths)} reference images with Florence 2...")
+                from stages.caption import CaptionGenerator
+
+                cap = CaptionGenerator(model_path=mm.get_model_path("florence2"))
+                cap.load_model()
+                cap.caption_dataset(stage1_dir, trigger)
+                cap.unload_model()
+                del cap
+                gc.collect()
+                stage_msg(2, "Reference image captioning complete.")
+
+                # ----------------------------------------------------------
+                # Stage 1b — Generate regularization images (SRPO txt2img)
+                # ----------------------------------------------------------
+                reg_dir = os.path.join(job_dir, "regularization")
+                os.makedirs(reg_dir, exist_ok=True)
+
+                stage_msg(3, "Generating regularization images with SRPO base model...")
+
+                _REG_PROMPTS = [
+                    "a person, full body, studio lighting, white background",
+                    "a woman portrait, natural light, soft focus",
+                    "a man standing outdoors, casual pose, daylight",
+                    "a person sitting in a chair, indoor lighting",
+                    "a woman walking, full body, overcast sky",
+                    "a man portrait, dramatic side lighting",
+                    "a person, mid-body shot, neutral expression, studio",
+                    "a woman, full body, standing relaxed, simple background",
+                    "a man, face close-up, natural lighting",
+                    "a person, three-quarter view, casual clothing, outdoor",
+                    "a woman, full body, walking pose, urban background",
+                    "a man, mid-body, arms crossed, studio lighting",
+                    "a person, portrait, warm lighting, neutral background",
+                    "a woman standing, full body, park setting, natural light",
+                    "a man, face close-up, contemplative expression, soft light",
+                    "a person, mid-body shot, smiling, white background",
+                    "a woman, three-quarter rear view, looking over shoulder",
+                    "a man, full body, confident pose, studio backdrop",
+                    "a person, portrait, side lighting, dark background",
+                    "a woman, mid-body, laughing, window light",
+                    "a man, full body, casual walk, street background",
+                    "a person, face close-up, dramatic lighting, studio",
+                    "a woman, three-quarter view, gentle smile, outdoor",
+                    "a man, mid-body, relaxed pose, neutral background",
+                    "a person, full body, standing, overcast daylight",
+                ]
+                num_reg_images = min(25, len(_REG_PROMPTS))
+
+                try:
+                    from diffusers import FluxPipeline
+
+                    print("[Chimera] Loading SRPO base model for regularization image generation...")
+                    reg_pipe = FluxPipeline.from_pretrained(
+                        "black-forest-labs/FLUX.1-dev",
+                        torch_dtype=torch.bfloat16,
+                        token=params.get("hf_token"),
+                    )
+
+                    # Replace transformer weights with SRPO
+                    from safetensors.torch import load_file as _st_load
+                    srpo_sd = _st_load(srpo_safetensors_path)
+                    reg_pipe.transformer.load_state_dict(srpo_sd, strict=True)
+                    del srpo_sd
+                    gc.collect()
+                    torch.cuda.empty_cache()
+
+                    reg_pipe.enable_model_cpu_offload()
+
+                    for reg_idx, reg_prompt in enumerate(_REG_PROMPTS[:num_reg_images]):
+                        emit("reg_progress", {"current": reg_idx + 1, "total": num_reg_images})
+                        stage_msg(3, f"Generating regularization image {reg_idx + 1}/{num_reg_images}...")
+                        generator = torch.Generator("cpu").manual_seed(42 + reg_idx)
+                        reg_result = reg_pipe(
+                            prompt=reg_prompt,
+                            num_inference_steps=28,
+                            guidance_scale=3.5,
+                            generator=generator,
+                            height=1024,
+                            width=1024,
+                        ).images[0]
+                        reg_img_path = os.path.join(reg_dir, f"reg_{reg_idx:03d}.png")
+                        reg_result.save(reg_img_path, format="PNG")
+                        # Caption each reg image with just the class word
+                        reg_caption_path = os.path.join(reg_dir, f"reg_{reg_idx:03d}.txt")
+                        Path(reg_caption_path).write_text(reg_prompt, encoding="utf-8")
+
+                    del reg_pipe
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                    stage_msg(3, f"Regularization complete — {num_reg_images} images generated.")
+                except Exception as reg_exc:
+                    print(f"[Chimera] WARNING: Regularization generation failed: {reg_exc}")
+                    print("[Chimera] Continuing without regularization images.")
+                    stage_msg(3, "WARNING: Regularization generation failed — continuing without regularization.")
+                    reg_dir = None
+
+                # ----------------------------------------------------------
+                # Stage 2 (enhanced) — Identity LoRA training on SRPO base
+                # ----------------------------------------------------------
+                identity_rank = params.get("identity_rank", 32)
+                identity_steps = params.get("identity_steps", 750)
+                stage_msg(4, f"Training identity LoRA on SRPO base (rank {identity_rank}, {identity_steps} steps)...")
+
+                from stages.train import LoRATrainer
+
+                identity_output = os.path.join(job_dir, "identity_lora")
+                os.makedirs(identity_output, exist_ok=True)
+                identity_name = f"{trigger}_identity"
+
+                identity_trainer = LoRATrainer(
+                    model_path=srpo_hybrid_dir,
+                    toolkit_path=TOOLKIT_PATH,
+                    base_model="srpo",
+                )
+
+                # Stderr capture for identity training progress
+                _id_tqdm_step = [0]
+                _ID_TQDM_RE = _re.compile(r'\b(\d+)/' + str(identity_steps) + r'\s*\[')
+
+                class _IDStderrCapture:
+                    def __init__(self, real):
+                        self._real = real
+                    def write(self, s):
+                        self._real.write(s)
+                        m = _ID_TQDM_RE.search(s)
+                        if m:
+                            _id_tqdm_step[0] = int(m.group(1))
+                        return len(s)
+                    def flush(self):
+                        self._real.flush()
+                    def __getattr__(self, name):
+                        return getattr(self._real, name)
+
+                _id_stop = threading.Event()
+                _id_samples_dir = os.path.join(identity_output, identity_name, "samples")
+                _id_num_prompts = len(params.get("sample_prompts") or ["default1", "default2"])
+
+                def _id_watcher():
+                    last = -1
+                    seen_samples: set[str] = set()
+                    pending_samples: dict[int, dict] = {}
+                    while not _id_stop.is_set():
+                        time.sleep(2)
+                        step = _id_tqdm_step[0]
+                        if step != last:
+                            emit("identity_progress", {"step": step, "total_steps": identity_steps})
+                            last = step
+
+                        # Poll for sample images
+                        if os.path.isdir(_id_samples_dir):
+                            sample_files = sorted(
+                                f for f in os.listdir(_id_samples_dir)
+                                if (f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg"))
+                                and f not in seen_samples
+                            )
+                            for sf in sample_files:
+                                seen_samples.add(sf)
+                                url = f"/api/images/{job_id}/identity_lora/{identity_name}/samples/{sf}"
+                                parsed_step = -1
+                                try:
+                                    parts = sf.rsplit(".", 1)[0]
+                                    step_part = parts.split("__")[1].split("_")[0]
+                                    parsed_step = int(step_part)
+                                except (IndexError, ValueError):
+                                    pass
+                                if parsed_step not in pending_samples:
+                                    pending_samples[parsed_step] = {"urls": [], "first_seen": time.time()}
+                                pending_samples[parsed_step]["urls"].append(url)
+
+                        now = time.time()
+                        done_steps = []
+                        for s_step, info in sorted(pending_samples.items()):
+                            have_all = len(info["urls"]) >= _id_num_prompts
+                            timed_out = (now - info["first_seen"]) > 30
+                            if have_all or timed_out:
+                                effective_step = s_step if s_step >= 0 else step
+                                # Find checkpoint file for this step
+                                ckpt_path = None
+                                ckpt_dir = os.path.join(identity_output, identity_name)
+                                if os.path.isdir(ckpt_dir):
+                                    import re as _re_inner
+                                    for f in os.listdir(ckpt_dir):
+                                        if f.endswith(".safetensors"):
+                                            step_match = _re_inner.search(r'step0*' + str(effective_step) + r'(?:\D|$)', f)
+                                            if step_match:
+                                                ckpt_path = os.path.join(ckpt_dir, f)
+                                                break
+                                emit("identity_checkpoint", {
+                                    "step": effective_step,
+                                    "checkpoint_path": ckpt_path,
+                                    "sample_paths": info["urls"],
+                                })
+                                done_steps.append(s_step)
+                        for s in done_steps:
+                            del pending_samples[s]
+
+                id_watcher_thread = threading.Thread(target=_id_watcher, daemon=True,
+                                                     name=f"id-watcher-{job_id}")
+                id_watcher_thread.start()
+
+                _id_real_stderr = sys.stderr
+                sys.stderr = _IDStderrCapture(_id_real_stderr)
+                try:
+                    identity_lora_path = identity_trainer.train(
+                        dataset_dir=stage1_dir,  # 10 Gemini images with captions
+                        output_dir=identity_output,
+                        output_name=identity_name,
+                        trigger_word=trigger,
+                        rank=identity_rank,
+                        steps=identity_steps,
+                        resolution=1024,
+                        save_every=100,
+                        sample_every=100,
+                        sample_prompts=([params["sample_prompts"][0]] if params.get("sample_prompts")
+                                        else None),
+                        optimizer="prodigy",
+                        caption_dropout=0.10,
+                        regularization_dir=reg_dir,
+                    )
+                finally:
+                    sys.stderr = _id_real_stderr
+
+                _id_stop.set()
+                id_watcher_thread.join(timeout=5)
+                emit("identity_progress", {"step": identity_steps, "total_steps": identity_steps})
+                emit("identity_complete", {"lora_path": identity_lora_path})
+
+                identity_trainer.cleanup()
+                del identity_trainer
+                gc.collect()
+                torch.cuda.empty_cache()
+                gc.collect()
+
+                # Log VRAM state after identity training cleanup
+                if torch.cuda.is_available():
+                    free, total_vram = torch.cuda.mem_get_info()
+                    print(
+                        f"[Chimera] VRAM after identity LoRA cleanup: "
+                        f"{free / 1e9:.1f} GB free / {total_vram / 1e9:.1f} GB total"
+                    )
+
+                stage_msg(4, "Identity LoRA training complete.")
+
+            # ------------------------------------------------------------------
+            # Stage 3 (v0.2) / Stage 2 (legacy) — Dataset synthesis
             # ------------------------------------------------------------------
             num_images = params["num_images"]
+            synth_stage = 5 if enhanced_mode else 2
 
             def synthesis_progress(current: int, total: int) -> None:
                 filename = f"img_{current:03d}.png"
@@ -912,10 +1259,26 @@ def _run_pipeline(
 
             if synthesizer_choice == "klein_kv":
                 # --- Klein 9B KV: 4 reference images, 4 steps, KV-cache ---
-                stage_msg(2, "Loading FLUX.2 Klein 9B KV — this takes a moment...")
+                stage_msg(synth_stage, "Loading FLUX.2 Klein 9B KV — this takes a moment...")
                 from stages.synthesize import KleinSynthesizer, select_klein_references
 
-                klein_refs = select_klein_references(view_images)
+                # v0.2: select best 4 from 10 views by name for Klein
+                if enhanced_mode and len(view_paths) >= 10:
+                    _KLEIN_ENHANCED_NAMES = [
+                        "front_fullbody", "front_face_closeup",
+                        "left_34_midbody", "right_profile_closeup",
+                    ]
+                    _name_to_idx = {os.path.splitext(os.path.basename(p))[0]: i
+                                    for i, p in enumerate(view_paths)}
+                    klein_ref_indices = [_name_to_idx[n] for n in _KLEIN_ENHANCED_NAMES
+                                         if n in _name_to_idx]
+                    if len(klein_ref_indices) == 4:
+                        klein_refs = [view_images[i] for i in klein_ref_indices]
+                    else:
+                        klein_refs = select_klein_references(view_images)
+                else:
+                    klein_refs = select_klein_references(view_images)
+
                 klein_model_path = mm.get_model_path("flux2_klein_kv")
 
                 synth = KleinSynthesizer(
@@ -923,7 +1286,7 @@ def _run_pipeline(
                     hf_token=params["hf_token"],
                 )
                 synth.load_model()
-                stage_msg(2, f"Synthesizing {num_images} training images with Klein 9B KV (4 steps)...")
+                stage_msg(synth_stage, f"Synthesizing {num_images} training images with Klein 9B KV (4 steps)...")
 
                 synth.synthesize_dataset(
                     reference_images=klein_refs,
@@ -938,17 +1301,19 @@ def _run_pipeline(
                 del synth
             else:
                 # --- Flux 2 DEV: up to 10 reference images, 50 steps ---
-                stage_msg(2, "Loading Flux 2 DEV — this takes a moment...")
+                stage_msg(synth_stage, "Loading Flux 2 DEV — this takes a moment...")
                 from stages.synthesize import DatasetSynthesizer
 
+                # Use a subset of Gemini images as refs for synthesis
+                synth_refs = view_images
                 synth = DatasetSynthesizer(
                     hf_token=params["hf_token"],
                 )
                 synth.load_model()
-                stage_msg(2, f"Synthesizing {num_images} training images with Flux 2 DEV...")
+                stage_msg(synth_stage, f"Synthesizing {num_images} training images with Flux 2 DEV...")
 
                 synth.synthesize_dataset(
-                    reference_images=view_images,
+                    reference_images=synth_refs,
                     output_dir=dataset_dir,
                     num_images=num_images,
                     start_from=0,
@@ -964,14 +1329,15 @@ def _run_pipeline(
             gc.collect()
 
             # ------------------------------------------------------------------
-            # Stage 2a — SeedVR2 Upscale (1024→2048)
+            # Stage 3a/2a — SeedVR2 Upscale (1024→2048)
             # ------------------------------------------------------------------
+            upscale_stage = 6 if enhanced_mode else 2
             if os.path.isdir(SEEDVR2_PATH):
-                stage_msg(2, "Upscaling dataset to 2048px with SeedVR2 7B...")
+                stage_msg(upscale_stage, "Upscaling dataset to 2048px with SeedVR2 7B...")
                 from stages.upscale import ImageUpscaler
 
                 def upscale_progress(current: int, total: int) -> None:
-                    stage_msg(2, f"Upscaling image {current}/{total}...")
+                    stage_msg(upscale_stage, f"Upscaling image {current}/{total}...")
 
                 def upscale_image_done(index: int, orig_rel: str, upscaled_rel: str) -> None:
                     emit("upscaled", {
@@ -993,9 +1359,10 @@ def _run_pipeline(
                 print("[Chimera] SeedVR2 CLI not found — skipping upscale stage.")
 
             # ------------------------------------------------------------------
-            # Stage 2b — Captioning (Florence 2)
+            # Stage 3b/2b — Captioning (Florence 2)
             # ------------------------------------------------------------------
-            stage_msg(2, "Captioning dataset with Florence 2...")
+            caption_stage = 7 if enhanced_mode else 2
+            stage_msg(caption_stage, "Captioning dataset with Florence 2...")
             from stages.caption import CaptionGenerator
 
             cap = CaptionGenerator(model_path=mm.get_model_path("florence2"))
@@ -1006,182 +1373,31 @@ def _run_pipeline(
             gc.collect()
 
         # ------------------------------------------------------------------
-        # Enhanced Mode: First-pass training + Dataset Enhancement
+        # v0.2 Stage 4 (enhanced): Dataset Enhancement with SRPO + identity LoRA
         # ------------------------------------------------------------------
         from stages.train import LoRATrainer
 
-        first_pass_lora_path = None
-        if params.get("enhanced_mode"):
-            # Download SRPO LoRA if not already present
-            if not mm.is_model_ready("srpo_lora"):
-                stage_msg(3, "Downloading SRPO LoRA for photorealism (~1.5 GB)...")
-                mm._download_with_retry("srpo_lora")
+        if enhanced_mode and identity_lora_path:
+            # Clear stale latent cache FIRST — identity LoRA training cached
+            # latents for the Gemini images, but enhancement overwrites the
+            # synthetic dataset images.  Stale latents = wasted enhancement.
+            LoRATrainer.clear_latent_cache(dataset_dir)
 
-            # ----------------------------------------------------------
-            # Stage 3 (enhanced): First-pass LoRA on FLUX.1-dev
-            # ----------------------------------------------------------
-            first_pass_steps = params.get("first_pass_steps", 750)
-            first_pass_rank = params.get("first_pass_rank", 16)
-            stage_msg(3, f"First-pass LoRA training on FLUX.1-dev (rank {first_pass_rank}, {first_pass_steps} steps)...")
-
-            first_pass_output = os.path.join(job_dir, "first_pass_output")
-            os.makedirs(first_pass_output, exist_ok=True)
-            first_pass_name = f"{trigger}_firstpass"
-
-            first_pass_trainer = LoRATrainer(
-                model_path="black-forest-labs/FLUX.1-dev",
-                toolkit_path=TOOLKIT_PATH,
-                base_model="flux_dev",
-            )
-
-            # Stderr capture for first-pass progress
-            _fp_tqdm_step = [0]
-            _FP_TQDM_RE = _re.compile(r'\b(\d+)/' + str(first_pass_steps) + r'\s*\[')
-
-            class _FPStderrCapture:
-                def __init__(self, real):
-                    self._real = real
-                def write(self, s):
-                    self._real.write(s)
-                    m = _FP_TQDM_RE.search(s)
-                    if m:
-                        _fp_tqdm_step[0] = int(m.group(1))
-                    return len(s)
-                def flush(self):
-                    self._real.flush()
-                def __getattr__(self, name):
-                    return getattr(self._real, name)
-
-            _fp_stop = threading.Event()
-            _fp_samples_dir = os.path.join(first_pass_output, first_pass_name, "samples")
-            _fp_num_prompts = len([params["sample_prompts"][0]] if params.get("sample_prompts") else [
-                "default1", "default2",
-            ])
-
-            def _fp_watcher():
-                last = -1
-                seen_samples: set[str] = set()
-                pending_samples: dict[int, dict] = {}
-                while not _fp_stop.is_set():
-                    time.sleep(2)
-                    step = _fp_tqdm_step[0]
-                    if step != last:
-                        emit("first_pass_progress", {"step": step, "total": first_pass_steps})
-                        last = step
-
-                    # Poll for sample images
-                    if os.path.isdir(_fp_samples_dir):
-                        sample_files = sorted(
-                            f for f in os.listdir(_fp_samples_dir)
-                            if (f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg"))
-                            and f not in seen_samples
-                        )
-                        for sf in sample_files:
-                            seen_samples.add(sf)
-                            url = f"/api/images/{job_id}/first_pass_output/{first_pass_name}/samples/{sf}"
-                            parsed_step = -1
-                            try:
-                                parts = sf.rsplit(".", 1)[0]
-                                step_part = parts.split("__")[1].split("_")[0]
-                                parsed_step = int(step_part)
-                            except (IndexError, ValueError):
-                                pass
-                            if parsed_step not in pending_samples:
-                                pending_samples[parsed_step] = {"urls": [], "first_seen": time.time()}
-                            pending_samples[parsed_step]["urls"].append(url)
-
-                    now = time.time()
-                    done_steps = []
-                    for s_step, info in sorted(pending_samples.items()):
-                        have_all = len(info["urls"]) >= _fp_num_prompts
-                        timed_out = (now - info["first_seen"]) > 30
-                        if have_all or timed_out:
-                            effective_step = s_step if s_step >= 0 else step
-                            emit("first_pass_checkpoint", {"step": effective_step, "images": info["urls"]})
-                            done_steps.append(s_step)
-                    for s in done_steps:
-                        del pending_samples[s]
-
-            fp_watcher_thread = threading.Thread(target=_fp_watcher, daemon=True,
-                                                  name=f"fp-watcher-{job_id}")
-            fp_watcher_thread.start()
-
-            _fp_real_stderr = sys.stderr
-            sys.stderr = _FPStderrCapture(_fp_real_stderr)
-            try:
-                first_pass_lora_path = first_pass_trainer.train(
-                    dataset_dir=dataset_dir,
-                    output_dir=first_pass_output,
-                    output_name=first_pass_name,
-                    trigger_word=trigger,
-                    rank=first_pass_rank,
-                    learning_rate=params["learning_rate"],
-                    steps=first_pass_steps,
-                    resolution=1024,
-                    batch_size=params.get("batch_size", 1),
-                    save_every=first_pass_steps,  # only save final
-                    sample_every=min(100, first_pass_steps - 1) if first_pass_steps > 1 else 1,
-                    sample_prompts=[params["sample_prompts"][0]] if params.get("sample_prompts") else None,
-                )
-            finally:
-                sys.stderr = _fp_real_stderr
-
-            _fp_stop.set()
-            fp_watcher_thread.join(timeout=5)
-            emit("first_pass_progress", {"step": first_pass_steps, "total": first_pass_steps})
-
-            first_pass_trainer.cleanup()
-            del first_pass_trainer
-            gc.collect()
-            torch.cuda.empty_cache()
-            gc.collect()
-
-            # Log VRAM state after first-pass cleanup
-            if torch.cuda.is_available():
-                free, total = torch.cuda.mem_get_info()
-                print(
-                    f"[Chimera] VRAM after first-pass cleanup: "
-                    f"{free / 1e9:.1f} GB free / {total / 1e9:.1f} GB total"
-                )
-
-            # ----------------------------------------------------------
-            # Stage 4 (enhanced): Dataset Enhancement with img2img
-            # ----------------------------------------------------------
-            stage_msg(4, "Enhancing dataset with FLUX.1-dev + character LoRA + SRPO...")
+            enhance_stage_num = 8
+            stage_msg(enhance_stage_num, "Enhancing dataset with SRPO base + identity LoRA...")
             from stages.enhance import DatasetEnhancer
 
             enhancer = DatasetEnhancer(hf_token=params["hf_token"])
 
-            # Find SRPO LoRA .safetensors file (prefer rank128)
-            srpo_path = None
-            srpo_dir = mm.get_model_path("srpo_lora")
-            if os.path.isdir(srpo_dir):
-                for root, _dirs, files in os.walk(srpo_dir):
-                    for f in sorted(files):
-                        if f.endswith(".safetensors") and os.path.basename(root) == "rank128":
-                            srpo_path = os.path.join(root, f)
-                            break
-                    if srpo_path:
-                        break
-                # Fallback: any .safetensors
-                if not srpo_path:
-                    for root, _dirs, files in os.walk(srpo_dir):
-                        for f in sorted(files, reverse=True):
-                            if f.endswith(".safetensors"):
-                                srpo_path = os.path.join(root, f)
-                                break
-                        if srpo_path:
-                            break
-
             enhancer.load_model(
-                character_lora_path=first_pass_lora_path,
-                srpo_lora_path=srpo_path,
+                character_lora_path=identity_lora_path,
+                srpo_model_path=srpo_safetensors_path,
                 lora_weight=params.get("enhance_lora_weight", 0.75),
             )
 
             def _enhance_progress(current, total):
                 emit("enhance_progress", {"current": current, "total": total})
-                stage_msg(4, f"Enhancing image {current}/{total}...")
+                stage_msg(enhance_stage_num, f"Enhancing image {current}/{total}...")
 
             def _enhance_image_done(index, pre_rel, enhanced_rel):
                 emit("enhanced", {
@@ -1192,7 +1408,7 @@ def _run_pipeline(
 
             enhancer.enhance_dataset(
                 dataset_dir=dataset_dir,
-                strength=params.get("enhance_denoise", 0.40),
+                strength=params.get("enhance_denoise", 0.30),
                 inference_steps=params.get("enhance_steps", 28),
                 progress_callback=_enhance_progress,
                 image_callback=_enhance_image_done,
@@ -1203,7 +1419,7 @@ def _run_pipeline(
 
             # Optional re-captioning after enhancement
             if params.get("recaption_after_enhance"):
-                stage_msg(4, "Re-captioning enhanced images with Florence 2...")
+                stage_msg(enhance_stage_num, "Re-captioning enhanced images with Florence 2...")
                 # Delete old captions so Florence 2 regenerates them
                 for f in os.listdir(dataset_dir):
                     if f.endswith(".txt"):
@@ -1216,15 +1432,20 @@ def _run_pipeline(
                 del cap
                 gc.collect()
 
-            stage_msg(4, "Enhancement complete.")
+            stage_msg(enhance_stage_num, "Enhancement complete.")
 
         # ------------------------------------------------------------------
-        # Stage 3 — LoRA training (AI Toolkit / Z-Image)
+        # Stage 5 (v0.2) / Stage 3 (legacy) — Final LoRA training
         # ------------------------------------------------------------------
+        # Clear latent cache before final training — enhancement may have
+        # overwritten images whose latents were cached during identity training.
+        if enhanced_mode:
+            LoRATrainer.clear_latent_cache(dataset_dir)
+
         model_label = "FLUX.1-Krea-dev" if base_model == "flux_krea" else "Z-Image De-Turbo"
         model_key = "flux_krea" if base_model == "flux_krea" else "zimage_base"
-        final_stage = 5 if params.get("enhanced_mode") else 3
-        stage_msg(final_stage, f"Starting LoRA training with {model_label}...")
+        final_stage = 9 if enhanced_mode else 3
+        stage_msg(final_stage, f"Starting final LoRA training with {model_label}...")
 
         trainer = LoRATrainer(
             model_path=mm.get_model_path(model_key),
@@ -1381,6 +1602,9 @@ def _run_pipeline(
 
         # Final progress = 100%
         emit("progress", {"step": total_steps, "total": total_steps})
+
+        complete_stage = 10 if enhanced_mode else 3
+        stage_msg(complete_stage, "Pipeline complete.")
 
         emit("complete", {
             "lora_path": lora_path,

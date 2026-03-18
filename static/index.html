@@ -138,29 +138,29 @@
         <img id="previewImage" class="preview-image" hidden alt="preview">
       </div>
       <!-- 5 view slots -->
-      <div class="views-grid">
+      <div class="views-grid" id="viewsGrid">
         <div class="view-card">
-          <div class="view-placeholder" id="viewLeft">
+          <div class="view-placeholder" id="viewLeft" data-type="view" data-position="left">
             <div class="placeholder-inner"><div class="placeholder-icon">L</div><span>Left</span></div>
           </div>
         </div>
         <div class="view-card">
-          <div class="view-placeholder" id="viewFront">
+          <div class="view-placeholder" id="viewFront" data-type="view" data-position="front">
             <div class="placeholder-inner"><div class="placeholder-icon">F</div><span>Front</span></div>
           </div>
         </div>
         <div class="view-card">
-          <div class="view-placeholder" id="viewRight">
+          <div class="view-placeholder" id="viewRight" data-type="view" data-position="right">
             <div class="placeholder-inner"><div class="placeholder-icon">R</div><span>Right</span></div>
           </div>
         </div>
         <div class="view-card">
-          <div class="view-placeholder" id="viewFace">
+          <div class="view-placeholder" id="viewFace" data-type="view" data-position="face">
             <div class="placeholder-inner"><div class="placeholder-icon">FC</div><span>Face</span></div>
           </div>
         </div>
         <div class="view-card">
-          <div class="view-placeholder" id="viewBack">
+          <div class="view-placeholder" id="viewBack" data-type="view" data-position="back">
             <div class="placeholder-inner"><div class="placeholder-icon">B</div><span>Back</span></div>
           </div>
         </div>
@@ -276,6 +276,22 @@
     <span id="batchSizeHint" style="display:none;"></span>
   </div>
 
+  <!-- ============ IDENTITY LORA TRAINING ============ -->
+  <div class="section pipeline-section" id="sectionIdentityTraining">
+    <div class="section-header">
+      Identity LoRA Training
+      <span class="section-tag">First Pass</span>
+    </div>
+    <div class="progress-bar-container">
+      <div class="progress-track" style="flex:1;">
+        <div class="progress-fill" id="identityProgressFill" style="width: 0%"></div>
+        <div class="progress-glow" id="identityProgressGlow" style="left: 0%"></div>
+      </div>
+      <span class="progress-text" id="identityProgressText">0 / 750</span>
+    </div>
+    <div class="checkpoint-grid" id="identityCheckpointGrid"></div>
+  </div>
+
   <!-- ============ SYNTHETIC IMAGES ============ -->
   <div class="section pipeline-section" id="sectionSynthetic">
     <div class="section-header">
@@ -375,6 +391,26 @@
   </section>
 
 </div><!-- /.container -->
+
+<!-- ============ FULLSCREEN OVERLAY ============ -->
+<div class="fullscreen-overlay" id="fullscreenOverlay" style="display:none;" onclick="handleFullscreenOverlayClick(event)">
+  <button class="fullscreen-overlay-close" id="fullscreenOverlayClose" onclick="closeFullscreenOverlay()">&times;</button>
+  <div class="fullscreen-overlay-content" onclick="event.stopPropagation()">
+    <img id="fullscreenOverlayImg" src="" alt="">
+    <!-- Caption overlay (shown for synthetic images) -->
+    <div class="fullscreen-caption" id="fullscreenCaption" style="display:none;">
+      <span class="caption-label">Caption:</span>
+      <span class="caption-text" id="fullscreenCaptionText"></span>
+    </div>
+    <!-- Download button (shown for checkpoint images) -->
+    <div class="fullscreen-actions" id="fullscreenActions" style="display:none;">
+      <a class="download-checkpoint-btn" id="downloadCheckpointBtn" href="#">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download LoRA (Step <span id="downloadCheckpointStep">0</span>)
+      </a>
+    </div>
+  </div>
+</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="/static/app.js"></script>

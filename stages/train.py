@@ -104,6 +104,9 @@ class LoRATrainer:
         sample_every: int = 250,
         sample_prompts: Optional[list[str]] = None,
         progress_callback: Optional[Callable[[int, int], None]] = None,
+        optimizer: str = "adamw8bit",
+        caption_dropout: float = 0.05,
+        regularization_dir: Optional[str] = None,
     ) -> str:
         """
         Train a Z-Image LoRA and return the path to the final checkpoint.
@@ -142,6 +145,16 @@ class LoRATrainer:
                 callable invoked after each checkpoint save.  AI Toolkit
                 does not expose a step-level hook natively, so this is
                 reserved for future integration.
+            optimizer: Optimizer to use.  ``"adamw8bit"`` (default) or
+                ``"prodigy"``.  When ``"prodigy"`` is used the learning
+                rate is overridden to ``1.0`` and a Prodigy-specific
+                config block is injected.
+            caption_dropout: Caption dropout rate for the training dataset.
+                Defaults to ``0.05``.
+            regularization_dir: Optional path to a directory of
+                regularization images.  When provided, a second dataset
+                entry is added with ``is_reg=True`` and zero caption
+                dropout.  Ignored if the path is not a valid directory.
 
         Returns:
             Absolute path to the final ``.safetensors`` checkpoint file.
@@ -178,12 +191,16 @@ class LoRATrainer:
             save_every=save_every,
             sample_every=sample_every,
             sample_prompts=sample_prompts,
+            optimizer=optimizer,
+            caption_dropout=caption_dropout,
+            regularization_dir=regularization_dir,
         )
 
         print(
             f"[Chimera] LoRATrainer: starting training — "
             f"name={output_name!r}, steps={steps}, rank={rank}, "
-            f"lr={learning_rate}, resolution={resolution}"
+            f"lr={learning_rate}, resolution={resolution}, "
+            f"optimizer={optimizer!r}, caption_dropout={caption_dropout}"
         )
 
         # When sample_every >= steps, disable sampling entirely by
@@ -303,6 +320,63 @@ class LoRATrainer:
             )
         gc.collect()
 
+    @staticmethod
+    def clear_latent_cache(dataset_dir: str) -> int:
+        """
+        Delete cached latent files from a dataset directory.
+
+        AI Toolkit caches encoded latents to disk when cache_latents_to_disk=True.
+        These must be cleared when the underlying images change (e.g., after
+        enhancement) to prevent training on stale latent representations.
+
+        Args:
+            dataset_dir: Path to the dataset directory to scan.
+
+        Returns:
+            The number of cache files deleted.
+        """
+        import shutil
+
+        root = Path(dataset_dir)
+        if not root.is_dir():
+            return 0
+
+        deleted = 0
+
+        # Delete individual cached latent files by name pattern only.
+        # Using name-specific patterns avoids deleting legitimate .npy/.pt files
+        # that are not latent caches.
+        file_patterns = [
+            "**/*_latent*.*",
+            "**/*_cached*.*",
+            "**/*_cache*.*",
+            "**/*.latent",
+        ]
+        for pattern in file_patterns:
+            for fpath in root.glob(pattern):
+                if fpath.is_file():
+                    try:
+                        fpath.unlink()
+                        deleted += 1
+                    except Exception:
+                        pass
+
+        # Delete cache subdirectories by name.
+        dir_patterns = [".cache", "_cache", "latent_cache"]
+        for dirpath in root.rglob("*"):
+            if dirpath.is_dir() and dirpath.name in dir_patterns:
+                try:
+                    shutil.rmtree(dirpath, ignore_errors=True)
+                    deleted += 1
+                except Exception:
+                    pass
+
+        print(
+            f"[Chimera] LoRATrainer: cleared {deleted} cached latent file(s) "
+            f"from {dataset_dir}"
+        )
+        return deleted
+
     # ------------------------------------------------------------------
     # Private helpers — config construction
     # ------------------------------------------------------------------
@@ -321,6 +395,9 @@ class LoRATrainer:
         save_every: int,
         sample_every: int,
         sample_prompts: Optional[list[str]],
+        optimizer: str = "adamw8bit",
+        caption_dropout: float = 0.05,
+        regularization_dir: Optional[str] = None,
     ) -> dict:
         """
         Build an AI Toolkit job config dict for Z-Image LoRA training.
@@ -337,7 +414,8 @@ class LoRATrainer:
                 checkpoint filenames.
             trigger_word: Unique token identifying the character.
             rank: LoRA rank (``linear`` and ``linear_alpha``).
-            learning_rate: Optimizer learning rate.
+            learning_rate: Optimizer learning rate.  Overridden to ``1.0``
+                when ``optimizer="prodigy"``.
             steps: Total training steps.
             resolution: Square pixel resolution.
             batch_size: Images per gradient step.
@@ -345,6 +423,10 @@ class LoRATrainer:
             sample_every: Sample-generation interval in steps.
             sample_prompts: Prompts for in-training samples.  If ``None``,
                 two default prompts are generated from ``trigger_word``.
+            optimizer: Optimizer name — ``"adamw8bit"`` or ``"prodigy"``.
+            caption_dropout: Caption dropout rate for the training dataset.
+            regularization_dir: Optional path to regularization images
+                directory.  Ignored when not a valid directory.
 
         Returns:
             Dict conforming to the AI Toolkit job schema.
@@ -354,6 +436,56 @@ class LoRATrainer:
                 f"a portrait of {trigger_word}, looking at the camera, studio lighting",
                 f"{trigger_word} walking in a park, natural lighting, full body shot",
             ]
+
+        # Prodigy auto-adjusts its own effective LR; initial value must be 1.0.
+        effective_lr = 1.0 if optimizer == "prodigy" else learning_rate
+
+        # Build optimizer block
+        if optimizer == "prodigy":
+            train_optimizer_block = {
+                "optimizer": "prodigy",
+                "lr": 1.0,
+                "optimizer_params": {
+                    "decouple": True,
+                    "weight_decay": 0.01,
+                    "d_coef": 0.8,
+                    "use_bias_correction": True,
+                    "safeguard_warmup": True,
+                    "betas": "0.9,0.99",
+                },
+            }
+        else:
+            train_optimizer_block = {
+                "optimizer": "adamw8bit",
+                "lr": effective_lr,
+            }
+
+        # LR scheduler — prodigy uses constant_with_warmup; others use cosine.
+        lr_scheduler = "constant_with_warmup" if optimizer == "prodigy" else "cosine"
+        warmup_steps = int(steps * 0.1) if optimizer == "prodigy" else 0
+
+        # Build datasets list — optionally include regularization images.
+        datasets = [
+            {
+                "folder_path": dataset_dir,
+                "caption_ext": "txt",
+                "caption_dropout_rate": caption_dropout,
+                "shuffle_tokens": False,
+                # Pre-encodes images to skip VAE on every step.
+                "cache_latents_to_disk": True,
+                "resolution": [resolution],
+            }
+        ]
+        if regularization_dir and os.path.isdir(regularization_dir):
+            datasets.append({
+                "folder_path": regularization_dir,
+                "caption_ext": "txt",
+                "caption_dropout_rate": 0.0,
+                "shuffle_tokens": False,
+                "cache_latents_to_disk": True,
+                "resolution": [resolution],
+                "is_reg": True,
+            })
 
         return {
             "job": "extension",
@@ -376,17 +508,7 @@ class LoRATrainer:
                             "max_step_saves_to_keep": 4,
                             "push_to_hub": False,
                         },
-                        "datasets": [
-                            {
-                                "folder_path": dataset_dir,
-                                "caption_ext": "txt",
-                                "caption_dropout_rate": 0.05,
-                                "shuffle_tokens": False,
-                                # Pre-encodes images to skip VAE on every step.
-                                "cache_latents_to_disk": True,
-                                "resolution": [resolution],
-                            }
-                        ],
+                        "datasets": datasets,
                         "train": {
                             "batch_size": batch_size,
                             "steps": steps,
@@ -396,9 +518,10 @@ class LoRATrainer:
                             "gradient_checkpointing": True,
                             # Z-Image uses the same flowmatch scheduler as Flux.
                             "noise_scheduler": "flowmatch",
-                            "optimizer": "adamw8bit",
-                            "lr": learning_rate,
+                            "lr_scheduler": lr_scheduler,
+                            "warmup_steps": warmup_steps,
                             "dtype": "bf16",
+                            **train_optimizer_block,
                         },
                         "model": self._model_block(),
                         **({"sample": {
@@ -423,6 +546,15 @@ class LoRATrainer:
 
     def _model_block(self) -> dict:
         """Return the AI Toolkit model config block for the selected base model."""
+        if self.base_model == "srpo":
+            # SRPO — architecturally identical to FLUX.1-dev but with different
+            # transformer weights.  model_path points to the SRPO model directory.
+            # fp8 quantize for faster training.
+            return {
+                "name_or_path": self.model_path,
+                "is_flux": True,
+                "quantize": True,
+            }
         if self.base_model == "flux_dev":
             # FLUX.1-dev — used for first-pass LoRA training in enhanced mode.
             # Downloads from HF Hub via repo ID (gated, requires HF_TOKEN).

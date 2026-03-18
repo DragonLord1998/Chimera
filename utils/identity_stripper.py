@@ -13,6 +13,16 @@ import regex as re
 # ---------------------------------------------------------------------------
 # Each pattern describes WHO the character is (appearance, demographics, body).
 # These are removed so the LoRA associates the trigger word with the identity.
+#
+# EXPRESSIONS ARE INTENTIONALLY PRESERVED — DO NOT ADD THEM HERE.
+# Words like "smiling", "laughing", "grinning", "serious", "neutral",
+# "contemplative", "surprised", "happy", "sad", "angry", "frowning",
+# "looking away", "eyes closed", "squinting", "smirking", "pensive",
+# "thoughtful", "joyful", "excited", etc. are NOT identity features.
+# They are transient states that vary between images and MUST remain in
+# captions so the LoRA learns to respond to them rather than averaging
+# all expressions into an unnatural neutral face.  If expressions are
+# stripped, the model loses the ability to generate them on request.
 
 IDENTITY_PATTERNS: list[str] = [
     # Hair — style+colour combos first (most specific), then colour-only, then standalone style
@@ -182,9 +192,6 @@ class IdentityStripper:
         """
         # One compiled group for connective/filler words we want to drop when
         # they appear without meaningful content around them.
-        _CONN = r'(?:with|and|or|but|of|for|a|an)'
-
-        # _CONN: connective/filler words that should be dropped when stranded.
         # Each alternative is a full word — always used with \b anchors below.
         _CONN = r'(?:with|and|or|but|of|for|a|an)'
 

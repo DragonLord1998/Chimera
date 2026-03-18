@@ -1,9 +1,13 @@
 """
 enhance.py — Dataset enhancer for Chimera.
 
-Uses FLUX.1-dev img2img with a character LoRA (from first-pass training) and
-an optional SRPO LoRA for photorealism to add realistic detail to synthetic
-training images while preserving composition and identity.
+Uses the SRPO base model (a full FLUX.1-dev transformer fine-tune) as the
+img2img pipeline base, with a character LoRA stacked on top to add realistic
+detail to synthetic training images while preserving composition and identity.
+
+The SRPO model is architecturally identical to FLUX.1-dev — same VAE,
+scheduler, and tokenizers — but its transformer weights are replaced with
+weights from the SRPO fine-tune for improved photorealism.
 """
 
 from __future__ import annotations
@@ -43,9 +47,13 @@ class DatasetEnhancerError(Exception):
 
 class DatasetEnhancer:
     """
-    Enhances synthetic training images using FLUX.1-dev img2img pipeline
-    with a character LoRA (from first-pass training) and optional SRPO LoRA
-    for photorealism.
+    Enhances synthetic training images using the SRPO base model as an
+    img2img pipeline, with a character LoRA stacked on top.
+
+    The SRPO model provides the transformer weights (photorealism fine-tune).
+    The pipeline structure (VAE, scheduler, tokenizers) comes from
+    ``black-forest-labs/FLUX.1-dev``.  Only one LoRA adapter is used:
+    the character identity LoRA from first-pass training.
 
     The enhancer preserves the original composition/pose while adding:
     - Consistent character identity (locked by character LoRA)
@@ -64,6 +72,8 @@ class DatasetEnhancer:
         Torch device string.  Defaults to ``"cuda"``.
     """
 
+    # FLUX.1-dev provides the pipeline structure (VAE, scheduler, tokenizers).
+    # Only the transformer weights are replaced by the SRPO safetensors file.
     REPO_ID: str = "black-forest-labs/FLUX.1-dev"
 
     def __init__(
@@ -82,35 +92,38 @@ class DatasetEnhancer:
     def load_model(
         self,
         character_lora_path: str,
-        srpo_lora_path: Optional[str] = None,
+        srpo_model_path: str,
         lora_weight: float = 0.75,
-        srpo_weight: float = 0.5,
     ) -> None:
-        """Load the FLUX.1-dev img2img pipeline with LoRA adapters.
+        """Load the SRPO img2img pipeline with the character LoRA adapter.
+
+        Loading sequence:
+        1. Load ``FluxImg2ImgPipeline`` from FLUX.1-dev for pipeline structure
+           (VAE, scheduler, tokenizers, text encoders).
+        2. Load the SRPO transformer weights from the provided safetensors file
+           and replace the pipeline transformer's state dict in-place.
+        3. Enable model CPU offload and VAE tiling.
+        4. Load the character identity LoRA as the single adapter.
 
         Uses ``enable_model_cpu_offload()`` to keep peak VRAM usage
         manageable, and ``vae.enable_tiling()`` for safe 2048px inference.
-
-        Character LoRA is always loaded.  SRPO LoRA is optional — pass
-        ``srpo_lora_path`` to stack both adapters for photorealism.
 
         Parameters
         ----------
         character_lora_path:
             Path to the character ``.safetensors`` LoRA checkpoint from
             first-pass training.
-        srpo_lora_path:
-            Optional path to an SRPO photorealism LoRA file.
+        srpo_model_path:
+            Path to the full SRPO transformer safetensors file
+            (``flux.1-dev-SRPO-bf16.safetensors``, ~23.8 GB).
         lora_weight:
             Adapter weight for the character LoRA.  Defaults to 0.75.
-        srpo_weight:
-            Adapter weight for the SRPO LoRA.  Defaults to 0.8.
 
         Raises
         ------
         DatasetEnhancerError
-            If ``FluxImg2ImgPipeline`` is not available or the character
-            LoRA file cannot be found.
+            If ``FluxImg2ImgPipeline`` is not available, or if either the
+            character LoRA or SRPO model file cannot be found.
         RuntimeError
             Re-raised from diffusers if the pipeline cannot be loaded.
         """
@@ -123,9 +136,9 @@ class DatasetEnhancer:
                 f"Character LoRA file not found: {character_lora_path!r}"
             )
 
-        if srpo_lora_path is not None and not os.path.isfile(srpo_lora_path):
+        if not os.path.isfile(srpo_model_path):
             raise DatasetEnhancerError(
-                f"SRPO LoRA file not found: {srpo_lora_path!r}"
+                f"SRPO base model file not found: {srpo_model_path!r}"
             )
 
         try:
@@ -137,58 +150,65 @@ class DatasetEnhancer:
                 "    pip install -U 'diffusers>=0.30.0'\n"
             ) from exc
 
-        print(
-            f"[Chimera] DatasetEnhancer: loading FLUX.1-dev img2img pipeline "
-            f"from {self.REPO_ID} ..."
-        )
+        try:
+            from safetensors.torch import load_file as safetensors_load_file
+        except ImportError as exc:
+            raise DatasetEnhancerError(
+                "[DatasetEnhancer] safetensors is not installed.  "
+                "Install it with: pip install safetensors\n"
+            ) from exc
 
         # Ensure HF_TOKEN env var is set — some HF hub code paths check
         # the env var rather than the token= parameter.
         if self.hf_token:
             os.environ["HF_TOKEN"] = self.hf_token
 
+        # Step 1: Load pipeline structure from FLUX.1-dev (VAE, scheduler,
+        # tokenizers, text encoders). The transformer weights will be replaced.
+        print(
+            f"[Chimera] DatasetEnhancer: loading FLUX.1-dev pipeline structure "
+            f"from {self.REPO_ID} ..."
+        )
         self.pipe = FluxImg2ImgPipeline.from_pretrained(
             self.REPO_ID,
             torch_dtype=torch.bfloat16,
             token=self.hf_token,
         )
 
-        # CPU offloading moves each module to GPU only when needed.
+        # Step 2: Replace transformer weights with SRPO fine-tune.
+        # The SRPO model is architecturally identical to FLUX.1-dev — only
+        # the transformer weights differ.
+        print(
+            f"[Chimera] DatasetEnhancer: loading SRPO transformer weights "
+            f"from {srpo_model_path} ..."
+        )
+        srpo_state_dict = safetensors_load_file(srpo_model_path)
+        self.pipe.transformer.load_state_dict(srpo_state_dict, strict=True)
+        del srpo_state_dict
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        # Step 3: CPU offloading moves each module to GPU only when needed.
         self.pipe.enable_model_cpu_offload()
 
         # VAE tiling prevents OOM on 2048px images.
         self.pipe.vae.enable_tiling()
 
-        # Load character LoRA.
+        # Step 4: Load character LoRA as the single adapter.
         print(
             f"[Chimera] DatasetEnhancer: loading character LoRA from "
             f"{character_lora_path} ..."
         )
         self.pipe.load_lora_weights(character_lora_path, adapter_name="character")
-
-        adapters: list[str] = ["character"]
-        weights: list[float] = [lora_weight]
-
-        # Optionally stack SRPO LoRA.
-        if srpo_lora_path is not None:
-            print(
-                f"[Chimera] DatasetEnhancer: loading SRPO LoRA from "
-                f"{srpo_lora_path} ..."
-            )
-            self.pipe.load_lora_weights(srpo_lora_path, adapter_name="srpo")
-            adapters.append("srpo")
-            weights.append(srpo_weight)
-
-        self.pipe.set_adapters(adapters, adapter_weights=weights)
+        self.pipe.set_adapters(["character"], adapter_weights=[lora_weight])
 
         logger.info(
-            "[DatasetEnhancer] Pipeline ready — adapters=%s weights=%s",
-            adapters,
-            weights,
+            "[DatasetEnhancer] Pipeline ready — SRPO base + character LoRA (weight=%.2f)",
+            lora_weight,
         )
         print(
             f"[Chimera] DatasetEnhancer: pipeline ready "
-            f"(adapters={adapters}, weights={weights})."
+            f"(SRPO base model + character LoRA weight={lora_weight})."
         )
 
     def unload_model(self) -> None:
@@ -198,7 +218,7 @@ class DatasetEnhancer:
         that case.
         """
         if self.pipe is not None:
-            logger.info("[DatasetEnhancer] Unloading FLUX.1-dev img2img pipeline...")
+            logger.info("[DatasetEnhancer] Unloading SRPO img2img pipeline...")
             del self.pipe
             self.pipe = None
 
@@ -213,7 +233,7 @@ class DatasetEnhancer:
     def enhance_dataset(
         self,
         dataset_dir: str,
-        strength: float = 0.40,
+        strength: float = 0.30,
         inference_steps: int = 28,
         guidance_scale: float = 3.5,
         base_seed: int = 42,
@@ -241,7 +261,7 @@ class DatasetEnhancer:
             Directory containing ``.png``/``.jpg``/``.jpeg``/``.webp`` images.
         strength:
             img2img noise strength (0–1).  Lower preserves more of the
-            original.  Defaults to 0.40.
+            original.  Defaults to 0.30.
         inference_steps:
             Total denoising steps for the img2img pass.  Defaults to 28.
         guidance_scale:
@@ -439,10 +459,12 @@ class DatasetEnhancer:
                 "Call load_model() before enhance_single()."
             )
 
+        _should_close = False
         if _pil_image is not None:
             pil_image = _pil_image
         else:
             pil_image = Image.open(image_path).convert("RGB")
+            _should_close = True
 
         # Generator must be on CPU when enable_model_cpu_offload() is active.
         generator = torch.Generator("cpu").manual_seed(seed)
@@ -456,6 +478,9 @@ class DatasetEnhancer:
             generator=generator,
             max_sequence_length=512,
         ).images[0]
+
+        if _should_close:
+            pil_image.close()
 
         return result
 

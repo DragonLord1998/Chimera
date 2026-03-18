@@ -160,6 +160,13 @@ function addCheckpointRow(step, imageUrls, downloadUrl) {
   // Deduplicate: skip if a row for this step already exists
   if (container.querySelector(`.checkpoint-row[data-step="${step}"]`)) return;
 
+  // Extract jobId from downloadUrl if present (format: /api/download-checkpoint/{jobId}/{step})
+  let jobId = null;
+  if (downloadUrl) {
+    const m = downloadUrl.match(/\/api\/download-checkpoint\/([^/]+)\/\d+/);
+    if (m) jobId = m[1];
+  }
+
   const row = document.createElement("div");
   row.className = "checkpoint-row";
   row.dataset.step = step;
@@ -189,7 +196,15 @@ function addCheckpointRow(step, imageUrls, downloadUrl) {
     img.src = url;
     img.alt = `checkpoint step ${step}`;
     img.loading = "lazy";
+    img.dataset.type = "checkpoint";
+    img.dataset.step = step;
     wrap.appendChild(img);
+
+    // Click → fullscreen overlay with download button
+    wrap.addEventListener("click", () => {
+      openFullscreenOverlay(url, "checkpoint", { step, jobId });
+    });
+
     grid.appendChild(wrap);
   });
 
@@ -235,22 +250,54 @@ function onStageEvent(data) {
   console.log("[stage]", data);
 }
 
+// Map v0.2 view names to the 5 available UI slots (null = no slot, still counted)
+const VIEW_NAME_TO_SLOT = {
+  "front_face_closeup":         "viewFace",
+  "front_midbody":              "viewFront",
+  "front_fullbody":             null,
+  "left_34_midbody":            "viewLeft",
+  "right_profile_closeup":      "viewRight",
+  "right_34_midbody":           null,
+  "left_fullbody_walking":      null,
+  "front_midbody_laughing":     null,
+  "rear_34_midbody":            "viewBack",
+  "left_34_closeup_dramatic":   null,
+  // Legacy names
+  "left":  "viewLeft",
+  "front": "viewFront",
+  "right": "viewRight",
+  "face":  "viewFace",
+  "back":  "viewBack",
+};
+
 function onViewEvent(data, jobId) {
-  const id = `view${capitalize(data.position)}`;
-  const el = document.getElementById(id);
-  if (!el) return;
+  const position = data.position;
+  const slotId = (position in VIEW_NAME_TO_SLOT)
+    ? VIEW_NAME_TO_SLOT[position]
+    : `view${capitalize(position)}`;  // fallback for any unknown legacy name
 
-  const img = document.createElement("img");
-  img.src = data.url + "?t=" + Date.now();
-  img.alt = data.position;
-  img.loading = "lazy";
-
-  el.innerHTML = "";
-  el.appendChild(img);
-  el.classList.add("loaded");
   activateSection("sectionViews");
 
-  // Show download button once all 5 views are loaded
+  if (slotId) {
+    const el = document.getElementById(slotId);
+    if (el && !el.classList.contains("loaded")) {
+      const imgUrl = data.url + "?t=" + Date.now();
+      const img = document.createElement("img");
+      img.src = imgUrl;
+      img.alt = position;
+      img.loading = "lazy";
+      img.dataset.type = "view";
+
+      el.innerHTML = "";
+      el.appendChild(img);
+      el.classList.add("loaded");
+      el.style.cursor = "pointer";
+
+      el.onclick = () => openFullscreenOverlay(imgUrl, "view", {});
+    }
+  }
+
+  // Show download button once all 5 slots are filled
   const loaded = document.querySelectorAll(".view-placeholder.loaded").length;
   if (loaded >= 5 && jobId) {
     const dlBtn = document.getElementById("downloadViewsBtn");
@@ -268,6 +315,13 @@ function onSyntheticEvent(data, jobId) {
   img.src = imgUrl;
   img.alt = `synthetic ${data.index + 1}`;
   img.loading = "lazy";
+  img.dataset.type = "synthetic";
+
+  // Extract image filename from URL for caption fetch
+  const imageName = data.url.split("/").pop();
+  cell.dataset.type = "synthetic";
+  cell.dataset.imageName = imageName;
+  cell.dataset.jobId = jobId || "";
 
   cell.innerHTML = "";
   cell.appendChild(img);
@@ -533,7 +587,7 @@ function updateFirstPassModalIfOpen() {
 }
 
 // ---------------------------------------------------------------------------
-// Fullscreen image viewer
+// Fullscreen image viewer (legacy — used by first-pass modal)
 // ---------------------------------------------------------------------------
 
 function openFullscreenViewer(imageUrl, label) {
@@ -543,11 +597,20 @@ function openFullscreenViewer(imageUrl, label) {
   viewer.className = "fullscreen-viewer";
   viewer.id = "fullscreenViewer";
 
-  viewer.innerHTML = `
-    <div class="fullscreen-close">&times;</div>
-    <img src="${imageUrl}" alt="${label}">
-    <div class="fullscreen-step-label">${label}</div>
-  `;
+  const closeBtn = document.createElement("div");
+  closeBtn.className = "fullscreen-close";
+  closeBtn.textContent = "\u00d7";
+  viewer.appendChild(closeBtn);
+
+  const img = document.createElement("img");
+  img.src = imageUrl;
+  img.alt = label;
+  viewer.appendChild(img);
+
+  const stepLabel = document.createElement("div");
+  stepLabel.className = "fullscreen-step-label";
+  stepLabel.textContent = label;
+  viewer.appendChild(stepLabel);
 
   document.body.appendChild(viewer);
 
@@ -571,6 +634,98 @@ function closeFullscreenViewer() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Fullscreen overlay — unified modal for checkpoint, synthetic, and view images
+// ---------------------------------------------------------------------------
+
+let _fullscreenEscHandler = null;
+
+/**
+ * Open the fullscreen overlay for any image type.
+ * @param {string} imageUrl  - URL of the image to display
+ * @param {'checkpoint'|'synthetic'|'view'} type - image type
+ * @param {object} opts      - type-specific options:
+ *   checkpoint: { step, jobId }
+ *   synthetic:  { jobId, imageName }
+ *   view:       {}
+ */
+async function openFullscreenOverlay(imageUrl, type, opts = {}) {
+  const overlay   = document.getElementById("fullscreenOverlay");
+  const img       = document.getElementById("fullscreenOverlayImg");
+  const caption   = document.getElementById("fullscreenCaption");
+  const captionTx = document.getElementById("fullscreenCaptionText");
+  const actions   = document.getElementById("fullscreenActions");
+  const dlBtn     = document.getElementById("downloadCheckpointBtn");
+  const stepSpan  = document.getElementById("downloadCheckpointStep");
+
+  if (!overlay || !img) return;
+
+  // Reset state
+  img.src = imageUrl;
+  caption.style.display = "none";
+  captionTx.textContent = "";
+  actions.style.display = "none";
+  dlBtn.href = "#";
+
+  if (type === "checkpoint") {
+    const { step, jobId } = opts;
+    actions.style.display = "";
+    stepSpan.textContent = step ? step.toLocaleString() : "0";
+    if (jobId && step != null) {
+      dlBtn.href = `/api/download-checkpoint/${jobId}/${step}`;
+      dlBtn.download = "";
+    }
+  } else if (type === "synthetic") {
+    const { jobId, imageName } = opts;
+    if (jobId && imageName) {
+      caption.style.display = "";
+      captionTx.textContent = "Loading…";
+      try {
+        const resp = await fetch(`/api/caption/${jobId}/${imageName}`);
+        if (resp.ok) {
+          const data = await resp.json();
+          captionTx.textContent = data.caption || "(no caption)";
+        } else {
+          captionTx.textContent = "(caption unavailable)";
+        }
+      } catch (_) {
+        captionTx.textContent = "(caption unavailable)";
+      }
+    }
+  }
+  // type === "view": no extras — just show the image
+
+  // Show overlay, lock body scroll
+  overlay.style.display = "flex";
+  document.body.style.overflow = "hidden";
+
+  // ESC key handler
+  if (_fullscreenEscHandler) {
+    document.removeEventListener("keydown", _fullscreenEscHandler);
+  }
+  _fullscreenEscHandler = (e) => {
+    if (e.key === "Escape") closeFullscreenOverlay();
+  };
+  document.addEventListener("keydown", _fullscreenEscHandler);
+}
+
+function closeFullscreenOverlay() {
+  const overlay = document.getElementById("fullscreenOverlay");
+  if (overlay) overlay.style.display = "none";
+  document.body.style.overflow = "";
+  if (_fullscreenEscHandler) {
+    document.removeEventListener("keydown", _fullscreenEscHandler);
+    _fullscreenEscHandler = null;
+  }
+}
+
+function handleFullscreenOverlayClick(e) {
+  // Close only when clicking the backdrop (not the content)
+  if (e.target === document.getElementById("fullscreenOverlay")) {
+    closeFullscreenOverlay();
+  }
+}
+
 function onFirstPassProgress(data) {
   const pct = Math.min((data.step / data.total) * 100, 100);
   document.getElementById("firstPassFill").style.width = pct + "%";
@@ -578,6 +733,86 @@ function onFirstPassProgress(data) {
   document.getElementById("firstPassText").textContent =
     data.step.toLocaleString() + " / " + data.total.toLocaleString();
   activateSection("sectionFirstPass");
+}
+
+// ---------------------------------------------------------------------------
+// Identity LoRA training handlers
+// ---------------------------------------------------------------------------
+
+function onIdentityProgress(data) {
+  const pct = Math.min((data.step / data.total_steps) * 100, 100);
+  const fill = document.getElementById("identityProgressFill");
+  const glow = document.getElementById("identityProgressGlow");
+  const text = document.getElementById("identityProgressText");
+  if (fill) fill.style.width = pct + "%";
+  if (glow) glow.style.left = pct + "%";
+  if (text) text.textContent = data.step.toLocaleString() + " / " + data.total_steps.toLocaleString();
+  activateSection("sectionIdentityTraining");
+}
+
+function onIdentityCheckpoint(data, jobId) {
+  // data: { step, checkpoint_path, sample_paths }
+  const grid = document.getElementById("identityCheckpointGrid");
+  if (!grid) return;
+
+  activateSection("sectionIdentityTraining");
+
+  for (const url of (data.sample_paths || [])) {
+    // Deduplicate on replay
+    if (grid.querySelector(`[data-url="${CSS.escape(url)}"]`)) continue;
+
+    const wrap = document.createElement("div");
+    wrap.className = "identity-checkpoint-img-wrap";
+    wrap.dataset.url = url;
+    wrap.dataset.step = data.step;
+
+    const img = document.createElement("img");
+    img.src = url + "?t=" + Date.now();
+    img.alt = `Identity step ${data.step}`;
+    img.loading = "lazy";
+    wrap.appendChild(img);
+
+    // Step label badge
+    const badge = document.createElement("div");
+    badge.className = "identity-checkpoint-badge";
+    badge.textContent = `Step ${data.step.toLocaleString()}`;
+    wrap.appendChild(badge);
+
+    // Click → fullscreen with download button
+    wrap.addEventListener("click", () => {
+      openFullscreenOverlay(img.src, "checkpoint", { step: data.step, jobId });
+    });
+
+    grid.appendChild(wrap);
+  }
+
+  // Update live preview thumbnail
+  if (data.sample_paths && data.sample_paths.length > 0) {
+    const livePreview = document.getElementById("livePreviewImg");
+    if (livePreview) {
+      let previewImg = livePreview.querySelector("img");
+      if (!previewImg) {
+        livePreview.textContent = "";
+        previewImg = document.createElement("img");
+        previewImg.alt = "identity checkpoint sample";
+        livePreview.appendChild(previewImg);
+      }
+      previewImg.src = data.sample_paths[data.sample_paths.length - 1];
+      livePreview.title = `Identity Step ${data.step.toLocaleString()}`;
+    }
+    const meta = document.getElementById("livePreviewMeta");
+    if (meta) {
+      meta.textContent = `Identity LoRA \u2022 Step ${data.step.toLocaleString()}`;
+    }
+  }
+}
+
+function onIdentityComplete(data) {
+  const fill = document.getElementById("identityProgressFill");
+  const glow = document.getElementById("identityProgressGlow");
+  if (fill) fill.style.width = "100%";
+  if (glow) glow.style.left = "100%";
+  activateSection("sectionIdentityTraining");
 }
 
 function onEnhanceProgress(data) {
@@ -967,14 +1202,25 @@ function connectToJob(jobId, startBtn) {
     onCheckpointEvent(JSON.parse(e.data));
   });
 
-  evtSource.addEventListener("first_pass_progress", e => {
-    onFirstPassProgress(JSON.parse(e.data));
+  evtSource.addEventListener("identity_progress", e => {
+    onIdentityProgress(JSON.parse(e.data));
   });
 
-  evtSource.addEventListener("first_pass_checkpoint", e => {
+  evtSource.addEventListener("identity_checkpoint", e => {
+    onIdentityCheckpoint(JSON.parse(e.data), jobId);
+  });
+
+  evtSource.addEventListener("identity_complete", e => {
+    onIdentityComplete(JSON.parse(e.data));
+  });
+
+  evtSource.addEventListener("reg_progress", e => {
     const data = JSON.parse(e.data);
-    onFirstPassCheckpointEvent(data);
-    updateFirstPassModalIfOpen();
+    lastActivity = Date.now();
+    const stageEl = document.getElementById("stageMessage");
+    if (stageEl) {
+      stageEl.textContent = `Generating regularization image ${data.current}/${data.total}...`;
+    }
   });
 
   evtSource.addEventListener("enhanced", e => {
@@ -1018,8 +1264,9 @@ function connectToJob(jobId, startBtn) {
 
   [
     "stage", "view", "synthetic", "diffusion_preview", "upscaled",
-    "progress", "checkpoint", "first_pass_progress", "first_pass_checkpoint", "enhanced",
-    "enhance_progress", "complete", "heartbeat",
+    "progress", "checkpoint", "enhanced",
+    "enhance_progress", "identity_progress", "identity_checkpoint", "identity_complete",
+    "reg_progress", "complete", "heartbeat",
   ].forEach(
     name => evtSource.addEventListener(name, () => { lastActivity = Date.now(); })
   );
@@ -1294,12 +1541,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // Cells live in gridLeft and gridRight — use event delegation on a common ancestor
   function handleSyntheticClick(e) {
     const cell = e.target.closest(".synthetic-cell");
-    if (!cell) return;
+    if (!cell || !cell.classList.contains("loaded")) return;
     const hasEnhanced = cell.dataset.enhancedUrl && cell.dataset.originalUrl && cell.dataset.upscaledUrl;
     if (hasEnhanced) {
       openTripleComparison(cell.dataset.originalUrl, cell.dataset.upscaledUrl, cell.dataset.enhancedUrl);
     } else if (cell.classList.contains("has-comparison")) {
       openComparison(cell.dataset.originalUrl, cell.dataset.upscaledUrl);
+    } else if (cell.dataset.type === "synthetic") {
+      // Plain synthetic image — show caption overlay
+      const img = cell.querySelector("img");
+      const imgUrl = img ? img.src : "";
+      openFullscreenOverlay(imgUrl, "synthetic", {
+        jobId: cell.dataset.jobId || null,
+        imageName: cell.dataset.imageName || null,
+      });
     }
   }
 
@@ -1453,10 +1708,21 @@ document.addEventListener("DOMContentLoaded", () => {
     dlDatasetBtn.hidden = true;
     dlDatasetBtn.href = "#";
 
+    // Reset identity training section
+    const identityFill = document.getElementById("identityProgressFill");
+    const identityGlow = document.getElementById("identityProgressGlow");
+    const identityText = document.getElementById("identityProgressText");
+    const identityGrid = document.getElementById("identityCheckpointGrid");
+    if (identityFill) identityFill.style.width = "0%";
+    if (identityGlow) identityGlow.style.left = "0%";
+    if (identityText) identityText.textContent = "0 / 750";
+    if (identityGrid) identityGrid.innerHTML = "";
+
     // Deactivate pipeline sections
     [
       "sectionViews", "sectionSynthetic", "sectionFirstPass",
       "sectionEnhancement", "sectionTraining", "sectionCheckpoints",
+      "sectionIdentityTraining",
     ].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove("active");
@@ -1493,8 +1759,8 @@ document.addEventListener("DOMContentLoaded", () => {
     formData.append("learning_rate", document.getElementById("learningRate").value);
     formData.append("inference_steps", document.getElementById("inferenceSteps").value);
     formData.append("batch_size", document.getElementById("batchSize").value);
+    formData.append("enhanced_mode", document.getElementById("enhancedMode").checked ? "true" : "false");
     if (document.getElementById("enhancedMode").checked) {
-      formData.append("enhanced_mode", "true");
       formData.append("first_pass_rank", document.getElementById("firstPassRank").value);
       formData.append("first_pass_steps", document.getElementById("firstPassSteps").value);
       formData.append("enhance_denoise", document.getElementById("enhanceDenoise").value);
