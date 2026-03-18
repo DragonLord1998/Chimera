@@ -300,9 +300,10 @@ function onViewEvent(data, jobId) {
   }
 
   // Show download button once enough slots are filled (5 legacy or 10 enhanced)
-  const loaded = document.querySelectorAll(".view-placeholder.loaded").length;
-  const enhancedOn = document.getElementById("viewsGridEnhanced") &&
-                     document.getElementById("viewsGridEnhanced").style.display !== "none";
+  const vgEnh = document.getElementById("viewsGridEnhanced");
+  const enhancedOn = vgEnh && vgEnh.style.display !== "none";
+  const activeGrid = enhancedOn ? "#viewsGridEnhanced" : "#viewsGrid";
+  const loaded = document.querySelectorAll(`${activeGrid} .view-placeholder.loaded`).length;
   const threshold = enhancedOn ? 10 : 5;
   if (loaded >= threshold && jobId) {
     const dlBtn = document.getElementById("downloadViewsBtn");
@@ -1865,10 +1866,20 @@ document.addEventListener("DOMContentLoaded", () => {
         initSyntheticGrid(numImages);
         document.getElementById("syntheticCount").textContent = `0 / ${numImages}`;
 
-        // Activate enhanced mode sections if relevant
+        // Activate enhanced mode sections and views grid if relevant
         if (data.params && data.params.enhanced_mode) {
-          document.getElementById("sectionFirstPass").classList.add("active");
-          document.getElementById("sectionEnhancement").classList.add("active");
+          const fpSection = document.getElementById("sectionFirstPass");
+          if (fpSection) fpSection.classList.add("active");
+          const enhSection = document.getElementById("sectionEnhancement");
+          if (enhSection) enhSection.classList.add("active");
+          // Toggle to enhanced 10-slot views grid
+          const vgLegacy = document.getElementById("viewsGrid");
+          const vgEnhanced = document.getElementById("viewsGridEnhanced");
+          if (vgLegacy) vgLegacy.style.display = "none";
+          if (vgEnhanced) vgEnhanced.style.display = "";
+          // Sync the checkbox so connectToJob picks it up
+          const enhToggle = document.getElementById("enhancedMode");
+          if (enhToggle) enhToggle.checked = true;
         }
 
         // Reconnect — the server replays all past events
