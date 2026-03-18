@@ -1043,6 +1043,7 @@ def _run_pipeline(
                         srpo_hybrid_dir,
                         torch_dtype=torch.bfloat16,
                         token=params.get("hf_token"),
+                        low_cpu_mem_usage=True,
                     )
                     reg_pipe.enable_model_cpu_offload()
 

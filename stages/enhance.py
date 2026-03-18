@@ -165,6 +165,7 @@ class DatasetEnhancer:
                 srpo_model_path,
                 torch_dtype=torch.bfloat16,
                 token=self.hf_token,
+                low_cpu_mem_usage=True,
             )
         else:
             # Fallback: raw safetensors file — load FLUX.1-dev then swap.
