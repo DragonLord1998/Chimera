@@ -1224,6 +1224,188 @@ body {
   text-align: right;
 }
 
+/* ---------------------------------------------------------
+   Model download bars (Ember-to-Forge)
+   --------------------------------------------------------- */
+.model-dl-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.model-dl-bar {
+  position: relative;
+  transition: opacity 500ms ease, max-height 500ms ease, margin 500ms ease;
+  max-height: 40px;
+}
+
+.model-dl-track {
+  position: relative;
+  height: 28px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  transition: height 500ms ease;
+}
+
+.model-dl-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1),
+              background 800ms ease,
+              box-shadow 800ms ease;
+  background: hsl(15, 80%, 35%);
+}
+
+/* Sweep shimmer on active download fill */
+.model-dl-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 80px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18));
+  animation: dl-sweep 2s ease-in-out infinite;
+}
+
+@keyframes dl-sweep {
+  0%   { opacity: 0; transform: translateX(-80px); }
+  50%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(0); }
+}
+
+/* Label overlaid on the track */
+.model-dl-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.model-dl-name {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
+
+.model-dl-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.model-dl-size {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-sub);
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
+
+.model-dl-pct {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text);
+  min-width: 32px;
+  text-align: right;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+}
+
+/* Complete state — bar shrinks, turns green */
+.model-dl-bar.complete .model-dl-track {
+  height: 22px;
+}
+
+.model-dl-bar.complete .model-dl-fill {
+  background: var(--green) !important;
+  box-shadow: none !important;
+}
+
+.model-dl-bar.complete .model-dl-fill::after {
+  display: none;
+}
+
+.model-dl-bar.complete .model-dl-name,
+.model-dl-bar.complete .model-dl-size {
+  opacity: 0.6;
+}
+
+.model-dl-bar.complete .model-dl-pct {
+  color: var(--green);
+}
+
+/* Ready state — already downloaded, shown as compact green strip */
+.model-dl-bar.ready .model-dl-track {
+  height: 22px;
+}
+
+.model-dl-bar.ready .model-dl-fill {
+  background: var(--green) !important;
+  width: 100% !important;
+  box-shadow: none !important;
+}
+
+.model-dl-bar.ready .model-dl-fill::after {
+  display: none;
+}
+
+.model-dl-bar.ready .model-dl-name,
+.model-dl-bar.ready .model-dl-size {
+  opacity: 0.5;
+}
+
+.model-dl-bar.ready .model-dl-pct {
+  color: var(--green);
+  opacity: 0.7;
+}
+
+/* White flash on completion */
+@keyframes forge-flash {
+  0%   { filter: brightness(1); }
+  30%  { filter: brightness(1.8); }
+  100% { filter: brightness(1); }
+}
+
+.model-dl-bar.forge-flash .model-dl-track {
+  animation: forge-flash 600ms ease-out;
+}
+
+/* Error state — download failed */
+.model-dl-bar.dl-error .model-dl-track {
+  border-color: var(--red);
+}
+
+.model-dl-bar.dl-error .model-dl-fill {
+  background: var(--red) !important;
+  opacity: 0.4;
+  box-shadow: none !important;
+}
+
+.model-dl-bar.dl-error .model-dl-fill::after {
+  display: none;
+}
+
+.model-dl-bar.dl-error .model-dl-pct {
+  color: var(--red);
+}
+
 /* Count badge */
 .count-badge {
   font-family: var(--font-mono);

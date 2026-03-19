@@ -242,6 +242,149 @@ function handleFile(file) {
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Model Download UI (Ember-to-Forge)
+// ---------------------------------------------------------------------------
+
+function getForgeColor(pct) {
+  // Ember-to-Forge: dim ember → orange → golden → bright gold → green
+  const stops = [
+    { pct: 0,   h: 15,  s: 80,  l: 30 },
+    { pct: 30,  h: 25,  s: 90,  l: 48 },
+    { pct: 60,  h: 38,  s: 95,  l: 52 },
+    { pct: 85,  h: 48,  s: 100, l: 58 },
+    { pct: 100, h: 150, s: 70,  l: 45 },
+  ];
+  let lower = stops[0], upper = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (pct >= stops[i].pct && pct <= stops[i + 1].pct) {
+      lower = stops[i];
+      upper = stops[i + 1];
+      break;
+    }
+  }
+  const range = upper.pct - lower.pct || 1;
+  const t = (pct - lower.pct) / range;
+  const h = Math.round(lower.h + (upper.h - lower.h) * t);
+  const s = Math.round(lower.s + (upper.s - lower.s) * t);
+  const l = Math.round(lower.l + (upper.l - lower.l) * t);
+  return `hsl(${h}, ${s}%, ${l}%)`;
+}
+
+function getForgeGlow(pct) {
+  const intensity = Math.min(pct / 100, 1);
+  const spread = Math.round(4 + intensity * 12);
+  const alpha = (0.1 + intensity * 0.4).toFixed(2);
+  const color = getForgeColor(Math.min(pct, 85));
+  const hsla = color.replace(/hsl\((.+)\)/, "hsla($1, " + alpha + ")");
+  return `0 0 ${spread}px ${Math.round(spread * 0.6)}px ${hsla}`;
+}
+
+function escapeHtml(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function createModelDlBar(key, name, sizeHint, status) {
+  const bar = document.createElement("div");
+  bar.className = "model-dl-bar" + (status === "ready" ? " ready" : "");
+  bar.id = `model-dl-${key}`;
+  const isReady = status === "ready";
+  bar.innerHTML =
+    '<div class="model-dl-track">' +
+      '<div class="model-dl-fill" style="width: ' + (isReady ? '100' : '0') + '%"></div>' +
+      '<div class="model-dl-label">' +
+        '<span class="model-dl-name">' + escapeHtml(name) + '</span>' +
+        '<div class="model-dl-meta">' +
+          '<span class="model-dl-size">' + escapeHtml(sizeHint) + '</span>' +
+          '<span class="model-dl-pct">' + (isReady ? '\u2713' : '') + '</span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  return bar;
+}
+
+function updateModelDlCount() {
+  const stack = document.getElementById("modelDlStack");
+  const countEl = document.getElementById("modelDlCount");
+  if (stack && countEl) {
+    countEl.textContent = (stack.dataset.done || "0") + " / " + (stack.dataset.total || "0");
+  }
+}
+
+function onModelDownload(data) {
+  const section = document.getElementById("sectionModelDownload");
+  const stack = document.getElementById("modelDlStack");
+  if (!section || !stack) return;
+
+  section.style.display = "";
+  section.classList.add("active");
+
+  if (data.action === "init") {
+    stack.innerHTML = "";
+    let readyCount = 0;
+    for (const model of data.models) {
+      stack.appendChild(createModelDlBar(model.key, model.name, model.size_hint, model.status));
+      if (model.status === "ready") readyCount++;
+    }
+    stack.dataset.total = data.models.length;
+    stack.dataset.done = readyCount;
+    updateModelDlCount();
+    return;
+  }
+
+  // Find or create bar
+  let bar = document.getElementById("model-dl-" + data.key);
+  if (!bar) {
+    bar = createModelDlBar(data.key, data.name, data.size_hint || "", "queued");
+    stack.appendChild(bar);
+    stack.dataset.total = parseInt(stack.dataset.total || "0") + 1;
+    updateModelDlCount();
+  }
+
+  const fill = bar.querySelector(".model-dl-fill");
+  const pctEl = bar.querySelector(".model-dl-pct");
+
+  if (data.action === "progress") {
+    const pct = Math.round(data.percent);
+    if (fill) {
+      fill.style.width = pct + "%";
+      fill.style.background = getForgeColor(pct);
+      fill.style.boxShadow = getForgeGlow(pct);
+    }
+    if (pctEl) pctEl.textContent = pct + "%";
+  } else if (data.action === "complete") {
+    // Flash then settle to green
+    bar.classList.add("forge-flash");
+    if (fill) {
+      fill.style.width = "100%";
+    }
+    if (pctEl) pctEl.textContent = "\u2713";
+    setTimeout(function() {
+      bar.classList.add("complete");
+      bar.classList.remove("forge-flash");
+      // Clear inline styles after class is applied so CSS takes over cleanly
+      requestAnimationFrame(function() {
+        if (fill) {
+          fill.style.background = "";
+          fill.style.boxShadow = "";
+        }
+      });
+    }, 600);
+    stack.dataset.done = parseInt(stack.dataset.done || "0") + 1;
+    updateModelDlCount();
+  } else if (data.action === "error") {
+    bar.classList.remove("forge-flash");
+    bar.classList.add("dl-error");
+    if (fill) {
+      fill.style.background = "";
+      fill.style.boxShadow = "";
+    }
+    if (pctEl) pctEl.textContent = "\u2717";
+  }
+}
+
 // SSE event handlers
 // ---------------------------------------------------------------------------
 
@@ -1194,6 +1337,10 @@ function connectToJob(jobId, startBtn) {
     onStageEvent(JSON.parse(e.data));
   });
 
+  evtSource.addEventListener("model_download", e => {
+    onModelDownload(JSON.parse(e.data));
+  });
+
   evtSource.addEventListener("view", e => {
     onViewEvent(JSON.parse(e.data), jobId);
   });
@@ -1718,7 +1865,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Reset first-pass progress
     document.getElementById("firstPassFill").style.width = "0%";
     document.getElementById("firstPassGlow").style.left = "0%";
-    const firstPassStepsVal = parseInt(document.getElementById("firstPassSteps").value, 10) || 750;
+    const firstPassStepsVal = parseInt(document.getElementById("firstPassSteps").value, 10) || 1000;
     document.getElementById("firstPassText").textContent = `0 / ${firstPassStepsVal.toLocaleString()}`;
 
     // Reset enhancement count

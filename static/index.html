@@ -287,11 +287,11 @@
       <div class="enhanced-grid">
         <div class="synth-cell">
           <div class="synth-cell-label">First-Pass Rank</div>
-          <input type="number" id="firstPassRank" value="16" min="8" max="32" step="4">
+          <input type="number" id="firstPassRank" value="32" min="8" max="32" step="4">
         </div>
         <div class="synth-cell">
           <div class="synth-cell-label">First-Pass Steps</div>
-          <input type="number" id="firstPassSteps" value="750" min="500" max="2500" step="250">
+          <input type="number" id="firstPassSteps" value="1000" min="500" max="2500" step="250">
         </div>
         <div class="synth-cell">
           <div class="synth-cell-label">Denoise Strength</div>
@@ -327,6 +327,18 @@
     </div>
     <!-- Batch size hint hidden but present for JS -->
     <span id="batchSizeHint" style="display:none;"></span>
+  </div>
+
+  <!-- ============ MODEL DOWNLOADS ============ -->
+  <div class="section pipeline-section" id="sectionModelDownload" style="display:none;">
+    <div class="section-header">
+      Model Downloads
+      <span class="section-tag">Stage 0</span>
+      <span class="section-count mono" id="modelDlCount"></span>
+    </div>
+    <div class="model-dl-stack" id="modelDlStack">
+      <!-- Bars inserted dynamically by JS -->
+    </div>
   </div>
 
   <!-- ============ REGULARIZATION IMAGES ============ -->

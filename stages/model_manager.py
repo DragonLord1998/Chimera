@@ -9,6 +9,8 @@ automatically after pod restart.
 from __future__ import annotations
 
 import os
+import re
+import threading
 import time
 from typing import Optional
 
@@ -132,9 +134,11 @@ class ModelManager:
         self,
         base_path: str = "/workspace/models/",
         hf_token: Optional[str] = None,
+        progress_callback=None,
     ) -> None:
         self.base_path = os.path.abspath(base_path)
         self.hf_token = hf_token or os.environ.get("HF_TOKEN")
+        self.progress_callback = progress_callback
 
     # ------------------------------------------------------------------
     # Public API
@@ -257,11 +261,76 @@ class ModelManager:
     # Internal helpers
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _parse_size_hint(hint: str) -> int:
+        """Convert a human size hint like ``'~12 GB'`` to bytes."""
+        if not hint:
+            return 0
+        m = re.match(r"~?([\d.]+)\s*(GB|MB|KB)", hint, re.IGNORECASE)
+        if not m:
+            return 0
+        val = float(m.group(1))
+        unit = m.group(2).upper()
+        multipliers = {"KB": 1024, "MB": 1024**2, "GB": 1024**3}
+        return int(val * multipliers.get(unit, 1))
+
+    @staticmethod
+    def _path_size(path: str) -> int:
+        """Recursively compute total bytes under *path* (follows symlinks)."""
+        if not os.path.exists(path):
+            return 0
+        if os.path.isfile(path):
+            try:
+                return os.path.getsize(path)
+            except OSError:
+                return 0
+        total = 0
+        for dirpath, _, filenames in os.walk(path):
+            for f in filenames:
+                try:
+                    total += os.path.getsize(os.path.join(dirpath, f))
+                except OSError:
+                    pass
+        return total
+
     def _download_with_retry(self, model_key: str) -> None:
         """Attempt to download a model, retrying up to ``_RETRY_COUNT`` times."""
         spec = MODEL_REGISTRY[model_key]
         label = spec["description"]
         size = spec.get("size_hint", "unknown size")
+
+        # Determine path to monitor for progress
+        subdir_path = os.path.join(self.base_path, spec["subdir"])
+        if spec.get("ready_subdir"):
+            monitor_path = os.path.join(subdir_path, spec["ready_subdir"])
+        elif not spec.get("snapshot") and spec.get("filename"):
+            monitor_path = subdir_path  # single-file: monitor parent dir
+        else:
+            monitor_path = subdir_path
+
+        expected_bytes = self._parse_size_hint(size)
+        initial_size = self._path_size(monitor_path)
+
+        # Background thread for progress monitoring
+        stop_event = threading.Event()
+        monitor_thread = None
+
+        if self.progress_callback and expected_bytes > 0:
+            self.progress_callback(model_key, label, 0, size, "downloading")
+
+            # Poll faster for small models, slower for large ones to avoid I/O pressure
+            poll_interval = 2.0 if expected_bytes < 1024**3 else 5.0
+
+            def _monitor():
+                while not stop_event.wait(poll_interval):
+                    current = self._path_size(monitor_path) - initial_size
+                    pct = min(current / expected_bytes * 100, 99) if expected_bytes else 0
+                    if pct < 0:
+                        pct = 0
+                    self.progress_callback(model_key, label, pct, size, "downloading")
+
+            monitor_thread = threading.Thread(target=_monitor, daemon=True)
+            monitor_thread.start()
 
         for attempt in range(1, _RETRY_COUNT + 1):
             try:
@@ -271,8 +340,19 @@ class ModelManager:
                 )
                 self._download(model_key, spec)
                 print(f"[ModelManager] {label} — done.")
+
+                stop_event.set()
+                if monitor_thread:
+                    monitor_thread.join(timeout=3)
+                if self.progress_callback:
+                    self.progress_callback(model_key, label, 100, size, "complete")
                 return
             except (EntryNotFoundError, RepositoryNotFoundError) as exc:
+                stop_event.set()
+                if monitor_thread:
+                    monitor_thread.join(timeout=3)
+                if self.progress_callback:
+                    self.progress_callback(model_key, label, 0, size, "error")
                 # These are fatal — no point retrying.
                 print(f"[ModelManager] ERROR: {label} not found on HuggingFace: {exc}")
                 raise
@@ -285,6 +365,11 @@ class ModelManager:
                     )
                     time.sleep(delay)
                 else:
+                    stop_event.set()
+                    if monitor_thread:
+                        monitor_thread.join(timeout=3)
+                    if self.progress_callback:
+                        self.progress_callback(model_key, label, 0, size, "error")
                     print(
                         f"[ModelManager] ERROR: All {_RETRY_COUNT} attempts failed for "
                         f"'{model_key}': {exc}"

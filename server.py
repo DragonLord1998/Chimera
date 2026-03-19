@@ -251,7 +251,7 @@ def start_pipeline():
         identity_rank = max(8, min(64, int(request.form.get("identity_rank",
                             request.form.get("first_pass_rank", 32)))))
         identity_steps = max(500, min(2500, int(request.form.get("identity_steps",
-                             request.form.get("first_pass_steps", 750)))))
+                             request.form.get("first_pass_steps", 1000)))))
         enhance_denoise = max(0.15, min(0.50, float(request.form.get("enhance_denoise", 0.30))))
         enhance_steps = max(15, min(50, int(request.form.get("enhance_steps", 28))))
         enhance_lora_weight = max(0.5, min(1.0, float(request.form.get("enhance_lora_weight", 0.75))))
@@ -730,34 +730,56 @@ def _run_pipeline(
         # Stage 0 — Model download
         # ------------------------------------------------------------------
         stage_msg(0, "Checking and downloading required models...")
-        from stages.model_manager import ModelManager
+        from stages.model_manager import ModelManager, MODEL_REGISTRY
 
-        mm = ModelManager(base_path=MODELS_DIR, hf_token=params["hf_token"])
+        # Progress callback for model download UI
+        def _model_progress(key, name, percent, size_hint, status):
+            emit("model_download", {
+                "action": "progress" if status == "downloading" else status,
+                "key": key,
+                "name": name,
+                "percent": round(percent, 1),
+                "size_hint": size_hint,
+            }, ephemeral=(status == "downloading"))
+
+        mm = ModelManager(
+            base_path=MODELS_DIR,
+            hf_token=params["hf_token"],
+            progress_callback=_model_progress,
+        )
 
         # Download models based on selected base model
         base_model = params.get("base_model", "zimage")
         synthesizer_choice = params.get("synthesizer", "flux2_dev")
         enhanced_mode = params.get("enhanced_mode", False)
 
+        # Emit model list for download progress UI
         if base_model == "flux_krea":
-            # Flux Krea only needs its own model + Florence 2 for captioning
-            for key in ("florence2", "flux_krea"):
-                if not mm.is_model_ready(key):
-                    mm._download_with_retry(key)
+            _dl_keys = ["florence2", "flux_krea"]
         else:
-            mm.ensure_all_models()
-
-        # Download Klein 9B KV model on demand if user selected it
+            _dl_keys = ["florence2", "zimage_base", "zimage_text_enc",
+                        "zimage_tokenizer", "zimage_vae"]
         if synthesizer_choice == "klein_kv":
-            if not mm.is_model_ready("flux2_klein_kv"):
-                stage_msg(0, "Downloading FLUX.2 Klein 9B KV model (~29 GB)...")
-                mm._download_with_retry("flux2_klein_kv")
-
-        # v0.2: Download SRPO base model when enhanced_mode is enabled
+            _dl_keys.append("flux2_klein_kv")
         if enhanced_mode:
-            if not mm.is_model_ready("srpo_base"):
-                stage_msg(0, "Downloading SRPO base model for identity training + enhancement (~23.8 GB)...")
-                mm._download_with_retry("srpo_base")
+            _dl_keys.append("srpo_base")
+        _init_models = []
+        for _k in _dl_keys:
+            _spec = MODEL_REGISTRY[_k]
+            _init_models.append({
+                "key": _k,
+                "name": _spec["description"],
+                "size_hint": _spec.get("size_hint", ""),
+                "status": "ready" if mm.is_model_ready(_k) else "queued",
+            })
+        emit("model_download", {"action": "init", "models": _init_models})
+
+        for key in _dl_keys:
+            if not mm.is_model_ready(key):
+                mm._download_with_retry(key)
+
+        # v0.2: SRPO hybrid directory setup (downloads handled by loop above)
+        if enhanced_mode:
             srpo_safetensors_path = mm.get_model_path("srpo_base")
 
             # Build hybrid model directory: FLUX.1-dev structure + SRPO transformer.
@@ -1083,7 +1105,7 @@ def _run_pipeline(
                 # Stage 2 (enhanced) — Identity LoRA training on SRPO base
                 # ----------------------------------------------------------
                 identity_rank = params.get("identity_rank", 32)
-                identity_steps = params.get("identity_steps", 750)
+                identity_steps = params.get("identity_steps", 1000)
                 stage_msg(4, f"Training identity LoRA on SRPO base (rank {identity_rank}, {identity_steps} steps)...")
 
                 from stages.train import LoRATrainer
