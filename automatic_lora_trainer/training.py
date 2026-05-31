@@ -14,6 +14,10 @@ from .settings import AI_TOOLKIT_DIR
 from .state import RUNNING, env_for_case, log_path, read_log, write_training_state
 
 
+class TrainingUnavailable(RuntimeError):
+    pass
+
+
 def build_ai_toolkit_config(case_name, trigger, model_name, rank, steps, lr, sample_prompts, sample_every=250, save_every=250):
     case_name = ensure_case(case_name)
     paths = dirs(case_name)
@@ -136,6 +140,11 @@ def monitor_training_process(case_name, proc, log_file, total_steps):
 
 def start_tracked_training(case_name, config_path, total_steps):
     case_name = ensure_case(case_name)
+    run_py = AI_TOOLKIT_DIR / "run.py"
+    if not run_py.exists():
+        raise TrainingUnavailable(
+            f"ai-toolkit run.py was not found at {run_py}. Install ai-toolkit or launch Chimera with INSTALL_AI_TOOLKIT=1."
+        )
     key = (case_name, "train")
     existing = RUNNING.get(key)
     if existing and existing.poll() is None:

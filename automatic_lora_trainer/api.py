@@ -11,14 +11,14 @@ from pydantic import BaseModel
 
 from .captioning import caption_curated, preview_captions
 from .dashboard import expected_interval_steps, training_progress
-from .face_qc import score_candidates, score_select_pipeline
+from .face_qc import FaceQcUnavailable, score_candidates, score_select_pipeline
 from .generation import import_candidates, smoke_generate, start_background
 from .media import latest_sample_image, selected_from_qc, training_artifact_steps
 from .paths import clean_slug, create_case, dirs, ensure_case, image_paths, list_cases
 from .settings import AI_TOOLKIT_DIR, IMAGE_EXTS, WORK_ROOT
 from .state import read_log, read_training_state
 from .system import system_stats
-from .training import build_ai_toolkit_config, prepare_pipeline_training, start_pipeline_training
+from .training import TrainingUnavailable, build_ai_toolkit_config, prepare_pipeline_training, start_pipeline_training
 
 
 class CaseCreate(BaseModel):
@@ -211,12 +211,18 @@ def create_app() -> FastAPI:
 
     @app.post("/api/cases/{case_name}/qc/score")
     def post_qc_score(case_name: str, payload: QcRequest):
-        status, df = score_candidates(case_name, payload.identity_threshold, payload.min_face_area)
+        try:
+            status, df = score_candidates(case_name, payload.identity_threshold, payload.min_face_area)
+        except FaceQcUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {"status": status, "qc": dataframe_records(df), "state": case_payload(case_name, payload.top_n)}
 
     @app.post("/api/cases/{case_name}/qc/score-select")
     def post_qc_score_select(case_name: str, payload: QcRequest):
-        status, df, _, _ = score_select_pipeline(case_name, payload.identity_threshold, payload.min_face_area, payload.top_n)
+        try:
+            status, df, _, _ = score_select_pipeline(case_name, payload.identity_threshold, payload.min_face_area, payload.top_n)
+        except FaceQcUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {"status": status, "qc": dataframe_records(df), "state": case_payload(case_name, payload.top_n)}
 
     @app.post("/api/cases/{case_name}/captions")
@@ -257,15 +263,18 @@ def create_app() -> FastAPI:
 
     @app.post("/api/cases/{case_name}/training/start")
     def post_training_start(case_name: str, payload: TrainingStartRequest):
-        status, _, _, _, log = start_pipeline_training(
-            case_name,
-            payload.config_path,
-            payload.trigger,
-            payload.steps,
-            payload.sample_prompts,
-            payload.sample_every,
-            payload.save_every,
-        )
+        try:
+            status, _, _, _, log = start_pipeline_training(
+                case_name,
+                payload.config_path,
+                payload.trigger,
+                payload.steps,
+                payload.sample_prompts,
+                payload.sample_every,
+                payload.save_every,
+            )
+        except TrainingUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {"status": status, "log": log, "state": case_payload(case_name)}
 
     @app.get("/api/cases/{case_name}/dashboard")

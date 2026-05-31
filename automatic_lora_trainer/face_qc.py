@@ -16,6 +16,10 @@ from .settings import FACE_MODEL, WORK_ROOT
 FACE_APP = None
 
 
+class FaceQcUnavailable(RuntimeError):
+    pass
+
+
 def laplacian_sharpness(path):
     if cv2 is None:
         return 0.0
@@ -29,7 +33,13 @@ def get_face_app():
     global FACE_APP
     if FACE_APP is not None:
         return FACE_APP
-    from insightface.app import FaceAnalysis
+    try:
+        from insightface.app import FaceAnalysis
+    except ImportError as exc:
+        raise FaceQcUnavailable(
+            "Face QC dependencies are not installed. Install insightface and onnxruntime-gpu "
+            "or onnxruntime, or launch Colab with INSTALL_FACE_QC=1."
+        ) from exc
 
     if FACE_MODEL == "auraface":
         from huggingface_hub import snapshot_download
