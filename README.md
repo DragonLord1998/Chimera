@@ -36,6 +36,16 @@ What is wired today:
 
 If `FLUX2_PULID_COMMAND` is missing, the production pipeline returns a setup error instead of silently using fake generation.
 
+The Colab launcher now prepares the expected runtime:
+
+- Clones ComfyUI into `/content/ComfyUI`.
+- Installs the `ComfyUI-PuLID-Flux2` custom node.
+- Starts ComfyUI on local port `8188`.
+- Exports `FLUX2_PULID_COMMAND="python3 -m automatic_lora_trainer.flux2_pulid_runner"`.
+- Uses `FLUX2_PULID_WORKFLOW` as the ComfyUI API workflow template.
+
+Important: `FLUX2_PULID_WORKFLOW` must point to a real ComfyUI API-format Flux2-PuLID workflow JSON. The launcher writes a placeholder at `Project Chimera/flux2_pulid_workflow_api.json` if the file is missing, but production generation will only work after that placeholder is replaced with a real workflow exported from ComfyUI.
+
 ## Why This Plan
 
 Training a final LoRA directly from 1-3 images is fragile. It can overfit pose, lighting, expression, camera angle, or clothing. Project Chimera instead uses a two-stage approach:

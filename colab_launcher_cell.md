@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 
 REPO_URL = "https://github.com/DragonLord1998/Chimera.git"
-BRANCH = "project-chimera-react"
+BRANCH = "main"
 REPO_DIR = Path("/content/project-chimera")
 FRESH_CLONE_EVERY_RUN = True
 PORT = 7860
@@ -48,6 +48,8 @@ os.chmod(script_path, 0o755)
 env = os.environ.copy()
 env["PORT"] = str(PORT)
 env["HOST"] = "127.0.0.1"
+# Set this to your real ComfyUI API-format Flux2-PuLID workflow JSON after exporting it.
+# env["FLUX2_PULID_WORKFLOW"] = "/content/drive/MyDrive/GenAI/Project Chimera/flux2_pulid_workflow_api.json"
 
 print(f"Launching: {script_path}")
 print("Watch the output below for the Colab proxy URL.")

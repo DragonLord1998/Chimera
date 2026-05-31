@@ -5,6 +5,7 @@ set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 AI_TOOLKIT_DIR="${AI_TOOLKIT_DIR:-/content/ai-toolkit}"
+COMFYUI_DIR="${COMFYUI_DIR:-/content/ComfyUI}"
 WORK_ROOT="${WORK_ROOT:-/content/drive/MyDrive/GenAI/Project Chimera}"
 FALLBACK_WORK_ROOT="${FALLBACK_WORK_ROOT:-/content/Project Chimera}"
 PORT="${PORT:-7860}"
@@ -12,8 +13,11 @@ HOST="${HOST:-127.0.0.1}"
 INSTALL_FRONTEND="${INSTALL_FRONTEND:-1}"
 INSTALL_FACE_QC="${INSTALL_FACE_QC:-1}"
 INSTALL_AI_TOOLKIT="${INSTALL_AI_TOOLKIT:-1}"
+INSTALL_FLUX2_PULID="${INSTALL_FLUX2_PULID:-1}"
 INSTALL_TORCH="${INSTALL_TORCH:-0}"
 FACE_MODEL="${FACE_MODEL:-auraface}"
+COMFY_PORT="${COMFY_PORT:-8188}"
+FLUX2_PULID_WORKFLOW="${FLUX2_PULID_WORKFLOW:-$WORK_ROOT/flux2_pulid_workflow_api.json}"
 
 echo "[chimera] Preparing Project Chimera..."
 
@@ -84,15 +88,57 @@ if [[ "$INSTALL_AI_TOOLKIT" == "1" ]]; then
   python3 -m pip install -q -r "$AI_TOOLKIT_DIR/requirements.txt" || true
 fi
 
+if [[ "$INSTALL_FLUX2_PULID" == "1" ]]; then
+  echo "[chimera] Preparing ComfyUI Flux2-PuLID runtime..."
+  if [[ ! -d "$COMFYUI_DIR/.git" ]]; then
+    git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git "$COMFYUI_DIR"
+  else
+    echo "[chimera] ComfyUI already exists at ${COMFYUI_DIR}."
+  fi
+
+  python3 -m pip install -q -r "$COMFYUI_DIR/requirements.txt" || true
+
+  mkdir -p "$COMFYUI_DIR/custom_nodes"
+  if [[ ! -d "$COMFYUI_DIR/custom_nodes/ComfyUI-PuLID-Flux2/.git" ]]; then
+    git clone --depth 1 https://github.com/armi10121-png/ComfyUI-PuLID-Flux2.git "$COMFYUI_DIR/custom_nodes/ComfyUI-PuLID-Flux2" || \
+      echo "[chimera] Could not clone ComfyUI-PuLID-Flux2 automatically. Install it manually or set INSTALL_FLUX2_PULID=0."
+  fi
+  if [[ -f "$COMFYUI_DIR/custom_nodes/ComfyUI-PuLID-Flux2/requirements.txt" ]]; then
+    python3 -m pip install -q -r "$COMFYUI_DIR/custom_nodes/ComfyUI-PuLID-Flux2/requirements.txt" || true
+  fi
+
+  if [[ ! -f "$FLUX2_PULID_WORKFLOW" ]]; then
+    cat > "$FLUX2_PULID_WORKFLOW" <<'JSON'
+{
+  "_comment": "Replace this placeholder with a ComfyUI API-format Flux2-PuLID workflow. It must expose prompt/text, reference image, seed, and filename_prefix inputs so Project Chimera can fill them."
+}
+JSON
+    echo "[chimera] Wrote placeholder workflow: ${FLUX2_PULID_WORKFLOW}"
+    echo "[chimera] Replace it with a real ComfyUI API workflow before running production generation."
+  fi
+
+  if ! curl -fsS "http://127.0.0.1:${COMFY_PORT}/system_stats" >/dev/null 2>&1; then
+    echo "[chimera] Starting ComfyUI on 127.0.0.1:${COMFY_PORT}..."
+    (cd "$COMFYUI_DIR" && python3 main.py --listen 127.0.0.1 --port "$COMFY_PORT" > "$WORK_ROOT/comfyui.log" 2>&1 &)
+    sleep 8
+  fi
+
+  export COMFY_URL="http://127.0.0.1:${COMFY_PORT}"
+  export FLUX2_PULID_WORKFLOW
+  export FLUX2_PULID_COMMAND="python3 -m automatic_lora_trainer.flux2_pulid_runner"
+fi
+
 echo "[chimera] Starting app on ${HOST}:${PORT}."
 echo "[chimera] Work root: ${WORK_ROOT}"
 echo "[chimera] Proxy-only mode: open the Colab proxy URL printed by the Python server."
 
 export AI_TOOLKIT_DIR
+export COMFYUI_DIR
 export WORK_ROOT
 export HOST
 export PORT
 export FACE_MODEL
+export FLUX2_PULID_COMMAND="${FLUX2_PULID_COMMAND:-}"
 export PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}"
 
 python3 -m automatic_lora_trainer.app
