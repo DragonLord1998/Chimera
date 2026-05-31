@@ -50,6 +50,9 @@ env["PORT"] = str(PORT)
 env["HOST"] = "127.0.0.1"
 # Set this to your real ComfyUI API-format Flux2-PuLID workflow JSON after exporting it.
 # env["FLUX2_PULID_WORKFLOW"] = "/content/drive/MyDrive/GenAI/Project Chimera/flux2_pulid_workflow_api.json"
+# Set these after installing the real Z-Image Turbo train/inference commands.
+# env["ZIMAGE_IDENTITY_TRAIN_COMMAND"] = "..."
+# env["ZIMAGE_EXPANSION_COMMAND"] = "..."
 
 print(f"Launching: {script_path}")
 print("Watch the output below for the Colab proxy URL.")

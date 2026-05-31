@@ -143,6 +143,10 @@ function normalizeBool(value) {
   return value === true || value === "True" || value === "true" || value === 1 || value === "1";
 }
 
+function preflightItemOk(preflight, key) {
+  return Boolean((preflight?.full_items || preflight?.items || []).find((item) => item.key === key && item.ok));
+}
+
 function hashUtilityView() {
   const hash = window.location.hash.replace("#", "");
   return ["hardware", "datasets", "logs", "terminal"].includes(hash) ? hash : "";
@@ -584,13 +588,15 @@ function IngestPhase({ state, preflight, files, setFiles, consent, setConsent, b
   );
 }
 
-function SeedPhase({ state, dashboard, training, setTraining, samplePrompts, setSamplePrompts, configPath, busy, onPrepare, onStart, onRefresh }) {
+function SeedPhase({ state, dashboard, preflight, training, setTraining, samplePrompts, setSamplePrompts, configPath, busy, onPrepare, onStart, onRefresh }) {
+  const zimageReady = preflightItemOk(preflight, "zimage_identity_train_command");
+  const canStartIdentity = Boolean(configPath && state?.train?.length && zimageReady);
   return (
     <>
       <PageHeader
         eyebrow="Phase 4: Identity LoRA"
         title="Train Identity LoRA For Z-Image Turbo"
-        description="This stage consumes the strict-QC curated Flux2-PuLID seed dataset. The current training action uses the selected ai-toolkit config; dedicated Z-Image Turbo adapter support still needs backend work."
+        description="This stage consumes the strict-QC curated Flux2-PuLID seed dataset. Chimera exposes a command bridge here; Colab must provide the real Z-Image Turbo trainer command."
         actions={<span className="state-chip">{configPath ? "Config ready" : "Config pending"}</span>}
       />
       <section className="bento two-col">
@@ -605,8 +611,8 @@ function SeedPhase({ state, dashboard, training, setTraining, samplePrompts, set
           onRefresh={onRefresh}
           title="Identity LoRA Progress"
           startLabel="Start Z-Image Turbo LoRA"
-          startDisabled
-          notice="Dedicated Z-Image Turbo LoRA training is not wired yet. Caption + Config currently prepares the existing ai-toolkit config only."
+          startDisabled={!canStartIdentity}
+          notice={zimageReady ? "This command-backed stage writes the identity LoRA artifact into the case identity_lora folder." : "Set ZIMAGE_IDENTITY_TRAIN_COMMAND in Colab before starting this stage."}
         />
         <div className="side-stack">
           <SurfaceCard title="Current Config Parameters" icon={SlidersHorizontal}>
@@ -627,6 +633,7 @@ function SeedPhase({ state, dashboard, training, setTraining, samplePrompts, set
             <div className="stat-row">
               <StatPill label="Refs" value={state?.refs?.length || 0} />
               <StatPill label="Curated" value={state?.train?.length || 0} />
+              <StatPill label="Identity LoRA" value={state?.identity_lora_artifacts?.length || 0} />
             </div>
           </SurfaceCard>
         </div>
@@ -730,15 +737,17 @@ function QcPhase({ state, qc, setQc, qcSummary, qcByPath, busy, onScoreSelect, d
   );
 }
 
-function ZImageExpansionPhase({ state, dashboard }) {
+function ZImageExpansionPhase({ state, dashboard, preflight, zimageCount, setZimageCount, busy, onRun }) {
   const stats = dashboard?.stats || {};
+  const zimageReady = preflightItemOk(preflight, "zimage_expansion_command");
+  const hasIdentityLora = Boolean(state?.identity_lora_artifacts?.length);
   return (
     <>
       <PageHeader
         eyebrow="Phase 5: Z-Image Expansion"
         title="Massive Dataset From The Identity LoRA"
         description="After the Z-Image Turbo identity LoRA exists, this stage expands from the small curated seed set into the large production candidate dataset."
-        actions={<span className="state-chip">Backend pending</span>}
+        actions={<button disabled={busy || !zimageReady || !hasIdentityLora} onClick={onRun}><Wand2 size={16} /> Run Expansion</button>}
       />
       <section className="bento two-col">
         <div className="main-stack">
@@ -747,23 +756,21 @@ function ZImageExpansionPhase({ state, dashboard }) {
               <span>Original references <b>{state?.refs?.length || 0}</b></span>
               <span>Seed candidates <b>{state?.candidates?.length || 0}</b></span>
               <span>Strict-QC curated seed images <b>{state?.train?.length || 0}</b></span>
-              <span>Required identity LoRA <b>{dashboard?.artifacts?.checkpoint_files?.length ? "checkpoint available" : "n/a"}</b></span>
+              <span>Required identity LoRA <b>{state?.identity_lora_artifacts?.length ? "artifact available" : "n/a"}</b></span>
             </div>
           </SurfaceCard>
-          <SurfaceCard title="Production Dataset" icon={Wand2}>
-            <div className="empty-state">
-              Z-Image Turbo expansion is not wired yet. This panel will stay empty until the backend has a real identity-LoRA inference job and output folder.
-            </div>
-          </SurfaceCard>
+          <ImageGallery title="Z-Image Production Candidates" items={state?.production_candidates || []} empty="Z-Image production candidates will appear here after expansion" compact />
         </div>
         <div className="side-stack">
           <SurfaceCard title="Readiness" icon={ShieldCheck}>
             <div className="summary-list">
               <span>Identity LoRA config <b>{state?.config_path ? "ready" : "n/a"}</b></span>
               <span>Training state <b>{dashboard?.training_state?.status || "n/a"}</b></span>
-              <span>Target raw images <b>5000</b></span>
-              <span>Actual generated images <b>0</b></span>
+              <span>Z-Image command <b>{zimageReady ? "ready" : "n/a"}</b></span>
+              <span>Identity LoRA artifact <b>{hasIdentityLora ? "ready" : "n/a"}</b></span>
+              <span>Actual generated images <b>{state?.production_candidates?.length || 0}</b></span>
             </div>
+            <label>Target raw images <input type="number" value={zimageCount} onChange={(event) => setZimageCount(Number(event.target.value))} /></label>
           </SurfaceCard>
           <SurfaceCard title="Node Telemetry" icon={Activity}>
             <div className="telemetry-grid single">
@@ -778,7 +785,7 @@ function ZImageExpansionPhase({ state, dashboard }) {
   );
 }
 
-function FinalQcPhase({ state, qcSummary, dashboard }) {
+function FinalQcPhase({ state, qcSummary, dashboard, busy, onScoreSelect }) {
   const stats = dashboard?.stats || {};
   return (
     <>
@@ -786,15 +793,12 @@ function FinalQcPhase({ state, qcSummary, dashboard }) {
         eyebrow="Phase 6: Very Strict QC"
         title="Audit The Z-Image Production Dataset"
         description="This second-pass QC will run after Z-Image Turbo expands the identity LoRA into the large production pool. It is separate from the first strict QC gate."
-        actions={<span className="state-chip">Backend pending</span>}
+        actions={<button disabled={busy || !(state?.production_candidates?.length)} onClick={onScoreSelect}><ShieldCheck size={16} /> Score Final Dataset</button>}
       />
       <section className="qc-layout">
         <div className="main-stack">
-          <SurfaceCard title="Final Audit Grid" icon={ShieldCheck}>
-            <div className="empty-state">
-              No Z-Image production candidates exist yet. Current QC rows belong to the Flux2-PuLID seed dataset.
-            </div>
-          </SurfaceCard>
+          <ImageGallery title="Z-Image Production Candidates" items={state?.production_candidates || []} empty="No Z-Image production candidates exist yet" />
+          <ImageGallery title="Final Curated Dataset" items={state?.final || []} empty="Final selected images will appear after very strict QC" compact />
         </div>
         <div className="side-stack">
           <SurfaceCard title="Existing Seed QC" icon={Database}>
@@ -807,10 +811,10 @@ function FinalQcPhase({ state, qcSummary, dashboard }) {
           </SurfaceCard>
           <SurfaceCard title="Final QC Inputs" icon={Gauge}>
             <div className="summary-list">
-              <span>Z-Image raw images <b>0</b></span>
+              <span>Z-Image raw images <b>{state?.production_candidates?.length || 0}</b></span>
               <span>Duplicate pass <b>n/a</b></span>
               <span>Manual review <b>n/a</b></span>
-              <span>Final dataset <b>0</b></span>
+              <span>Final dataset <b>{state?.final?.length || 0}</b></span>
             </div>
           </SurfaceCard>
           <SurfaceCard title="Node Telemetry" icon={Cpu}>
@@ -914,7 +918,7 @@ function FactoryPhase({ state, dashboard, training, setTraining, configPath, sam
             <div className="summary-list">
               <span>Run state <b>{dashboard?.running ? "Running" : "Idle"}</b></span>
               <span>Current step <b>{fmt(dashboard?.current_step, "0")}</b></span>
-              <span>Curated images <b>{state?.train?.length || 0}</b></span>
+              <span>Final dataset images <b>{state?.final?.length || 0}</b></span>
             </div>
           </SurfaceCard>
           <SurfaceCard title="Training Log" icon={FileText}>
@@ -1009,6 +1013,8 @@ function UtilityPanel({ view, state, dashboard, qcSummary, configPath, training,
               <StatPill label="Candidates" value={state?.candidates?.length || 0} />
               <StatPill label="QC rows" value={state?.qc?.length || 0} />
               <StatPill label="Curated train" value={state?.train?.length || 0} tone="good" />
+              <StatPill label="Z-Image raw" value={state?.production_candidates?.length || 0} />
+              <StatPill label="Final dataset" value={state?.final?.length || 0} tone="good" />
             </div>
             <div className="action-row utility-actions">
               <button onClick={onOpenLibrary}><Library size={16} /> Open Dataset Library</button>
@@ -1038,6 +1044,9 @@ function UtilityPanel({ view, state, dashboard, qcSummary, configPath, training,
           </SurfaceCard>
           <SurfaceCard title="Training Log" icon={FileText}>
             <pre>{state?.logs?.train || "No training log yet"}</pre>
+          </SurfaceCard>
+          <SurfaceCard title="Z-Image Logs" icon={FileText}>
+            <pre>{[state?.logs?.zimage_identity_lora, state?.logs?.zimage_expansion].filter(Boolean).join("\n\n") || "No Z-Image logs yet"}</pre>
           </SurfaceCard>
         </section>
       )}
@@ -1074,6 +1083,7 @@ function App() {
   const [files, setFiles] = useState([]);
   const [consent, setConsent] = useState(false);
   const [count, setCount] = useState(10);
+  const [zimageCount, setZimageCount] = useState(5000);
   const [importFolder, setImportFolder] = useState("/content/drive/MyDrive/GenAI/ComfyUI/output");
   const [generationCommand, setGenerationCommand] = useState(defaultGenerationCommand);
   const [qc, setQc] = useState({ identity_threshold: fixedIdentityThreshold, min_face_area: 0.01, top_n: 10 });
@@ -1232,6 +1242,18 @@ function App() {
       method: "POST",
       body: JSON.stringify({ config_path: configPath, trigger: training.trigger, steps: training.steps, sample_prompts: samplePrompts, sample_every: training.sample_every, save_every: training.save_every }),
     })),
+    runIdentityLora: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/identity-lora/run`, {
+      method: "POST",
+      body: JSON.stringify({ ...training, sample_prompts: samplePrompts, count: state?.train?.length || 1 }),
+    })),
+    runZImageExpansion: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/zimage-expansion/run`, {
+      method: "POST",
+      body: JSON.stringify({ trigger: training.trigger, count: zimageCount }),
+    })),
+    runFinalQc: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/final-qc/score-select`, {
+      method: "POST",
+      body: JSON.stringify({ min_face_area: qc.min_face_area, top_n: qc.top_n }),
+    })),
     refresh: () => loadState(),
     refreshPreflight: () => runAction(async () => {
       const payload = await loadPreflight();
@@ -1293,8 +1315,9 @@ function App() {
     "identity-lora": (
       <SeedPhase
         {...phaseProps}
+        preflight={preflight}
         onPrepare={actions.prepare}
-        onStart={actions.startTraining}
+        onStart={actions.runIdentityLora}
         onRefresh={actions.refresh}
       />
     ),
@@ -1302,6 +1325,11 @@ function App() {
       <ZImageExpansionPhase
         state={state}
         dashboard={dashboard}
+        preflight={preflight}
+        zimageCount={zimageCount}
+        setZimageCount={setZimageCount}
+        busy={busy}
+        onRun={actions.runZImageExpansion}
       />
     ),
     "final-qc": (
@@ -1309,6 +1337,8 @@ function App() {
         state={state}
         qcSummary={qcSummary}
         dashboard={dashboard}
+        busy={busy}
+        onScoreSelect={actions.runFinalQc}
       />
     ),
     library: (

@@ -34,14 +34,16 @@ What is wired today:
 - Preserve prompt-bucket metadata through QC into sidecar JSON.
 - Caption the accepted training images with character-LoRA captions: trigger token, class noun, framing, and visible non-identity attributes.
 - Build and start an Ostris `ai-toolkit` LoRA config for `black-forest-labs/FLUX.2-klein-base-9B`.
+- Run command-backed Z-Image identity LoRA training through `ZIMAGE_IDENTITY_TRAIN_COMMAND`; the command receives `TRAIN_DIR`, `IDENTITY_LORA_DIR`, `TRIGGER`, `ZIMAGE_BASE_MODEL`, `ZIMAGE_RANK`, `ZIMAGE_STEPS`, `ZIMAGE_LR`, sample settings, and case paths.
+- Run command-backed Z-Image expansion through `ZIMAGE_EXPANSION_COMMAND`; the command receives `ZIMAGE_PROMPT_MANIFEST`, `ZIMAGE_IDENTITY_LORA`, `PRODUCTION_CANDIDATE_DIR`, and case paths.
+- Run very-strict final QC over `production_candidates/` and copy accepted images into `curated/final/`.
 
 If `FLUX2_PULID_COMMAND` is missing, the production pipeline returns a setup error instead of silently using fake generation.
 
 What is not wired yet:
 
-- Dedicated Z-Image Turbo identity LoRA training adapter.
-- Massive generation from the Z-Image Turbo identity LoRA.
-- Very-strict second-pass QC over the Z-Image production dataset.
+- A bundled Z-Image Turbo trainer implementation. Chimera exposes the command bridge, but Colab still needs the real command/tool installed.
+- A bundled Z-Image Turbo inference implementation. Chimera exposes the expansion bridge, but Colab still needs the real command/tool installed.
 - Final multi-model LoRA training jobs for FLUX, Z-Image Base, Wan, and LTX.
 
 The Colab launcher now prepares the expected runtime:
@@ -352,6 +354,8 @@ PORT=7861 bash /content/project-chimera/colab_lora_factory.sh
 INSTALL_FRONTEND=0 bash /content/project-chimera/colab_lora_factory.sh
 INSTALL_AI_TOOLKIT=0 bash /content/project-chimera/colab_lora_factory.sh
 FACE_MODEL=buffalo_l bash /content/project-chimera/colab_lora_factory.sh
+ZIMAGE_IDENTITY_TRAIN_COMMAND="..." bash /content/project-chimera/colab_lora_factory.sh
+ZIMAGE_EXPANSION_COMMAND="..." bash /content/project-chimera/colab_lora_factory.sh
 ```
 
 Do not set `HOST=0.0.0.0`. The launcher will refuse it.
@@ -371,14 +375,20 @@ cases/
   <case_name>/
     refs/                 # uploaded original reference images
     candidates/           # generated or imported synthetic candidates
+    identity_lora/        # Z-Image Turbo identity LoRA artifacts
+    production_candidates/# large Z-Image expansion output
     curated/
       train/              # accepted training images and captions
+      final/              # accepted final images after very-strict QC
     rejected/             # rejected images, future use
     logs/
       generate.log
       train.log
+      zimage_identity_lora.log
+      zimage_expansion.log
     output/               # ai-toolkit output, samples, checkpoints
     qc_scores.csv
+    final_qc_scores.csv
     training_state.json
 ```
 
@@ -396,6 +406,7 @@ automatic_lora_trainer/
   state.py        # logs, running processes, training_state.json
   generation.py   # reference upload, imports, smoke generation, command runner
   flux2_pulid_runner.py # ComfyUI API bridge for Flux2-PuLID candidate generation
+  zimage.py       # command bridge for Z-Image identity LoRA and expansion stages
   face_qc.py      # InsightFace/AuraFace identity scoring and dataset selection
   captioning.py   # training captions and caption preview
   training.py     # ai-toolkit config and tracked training process

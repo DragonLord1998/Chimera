@@ -4,7 +4,7 @@ from pathlib import Path
 
 import requests
 
-from .settings import AI_TOOLKIT_DIR, FLUX2_PULID_COMMAND, WORK_ROOT
+from .settings import AI_TOOLKIT_DIR, FLUX2_PULID_COMMAND, WORK_ROOT, ZIMAGE_EXPANSION_COMMAND, ZIMAGE_IDENTITY_TRAIN_COMMAND
 
 
 def check_item(key, label, ok, detail, required=True):
@@ -89,6 +89,24 @@ def generation_command_check():
     )
 
 
+def zimage_identity_command_check():
+    return check_item(
+        "zimage_identity_train_command",
+        "Z-Image identity LoRA command",
+        bool(ZIMAGE_IDENTITY_TRAIN_COMMAND.strip()),
+        ZIMAGE_IDENTITY_TRAIN_COMMAND.strip() or "ZIMAGE_IDENTITY_TRAIN_COMMAND is not set.",
+    )
+
+
+def zimage_expansion_command_check():
+    return check_item(
+        "zimage_expansion_command",
+        "Z-Image expansion command",
+        bool(ZIMAGE_EXPANSION_COMMAND.strip()),
+        ZIMAGE_EXPANSION_COMMAND.strip() or "ZIMAGE_EXPANSION_COMMAND is not set.",
+    )
+
+
 def runtime_preflight():
     items = [
         work_root_check(),
@@ -98,9 +116,17 @@ def runtime_preflight():
         face_qc_check(),
         ai_toolkit_check(),
     ]
+    full_items = items + [
+        zimage_identity_command_check(),
+        zimage_expansion_command_check(),
+    ]
     blocking = [item for item in items if item["required"] and not item["ok"]]
+    full_blocking = [item for item in full_items if item["required"] and not item["ok"]]
     return {
         "ready": not blocking,
+        "full_ready": not full_blocking,
         "items": items,
+        "full_items": full_items,
         "blocking": blocking,
+        "full_blocking": full_blocking,
     }

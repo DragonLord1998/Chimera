@@ -81,15 +81,15 @@ def cosine(a, b):
     return float(np.dot(a, b) / max(float(np.linalg.norm(a) * np.linalg.norm(b)), 1e-8))
 
 
-def score_candidates(case_name, identity_threshold, min_face_area):
+def score_image_folder(case_name, source_key, csv_name, label, identity_threshold, min_face_area):
     case_name = ensure_case(case_name)
     paths = dirs(case_name)
     refs = image_paths(paths["refs"])
-    candidates = image_paths(paths["candidates"])
+    candidates = image_paths(paths[source_key])
     if not refs:
         return "No reference images found.", None
     if not candidates:
-        return "No candidate images found.", None
+        return f"No {label} images found.", None
 
     ref_embs = []
     ref_notes = []
@@ -143,22 +143,26 @@ def score_candidates(case_name, identity_threshold, min_face_area):
             rows.append({"file": str(pathp), "name": pathp.name, "identity_score": -1, "face_count": 0, "face_area": 0, "sharpness": 0, "width": 0, "height": 0, "passed": False, "reason": f"error: {exc}"})
 
     df = pd.DataFrame(rows).sort_values(["passed", "identity_score", "sharpness"], ascending=[False, False, False])
-    out = paths["case"] / "qc_scores.csv"
+    out = paths["case"] / csv_name
     df.to_csv(out, index=False)
-    summary = f"Scored {len(df)} candidates. Passed {int(df['passed'].sum())}. CSV: {out}\n" + "\n".join(ref_notes)
+    summary = f"Scored {len(df)} {label}. Passed {int(df['passed'].sum())}. CSV: {out}\n" + "\n".join(ref_notes)
     return summary, df
 
 
-def auto_select(case_name, top_n):
+def score_candidates(case_name, identity_threshold, min_face_area):
+    return score_image_folder(case_name, "candidates", "qc_scores.csv", "candidates", identity_threshold, min_face_area)
+
+
+def auto_select_from_csv(case_name, csv_name, dest_key, top_n, metadata=None):
     case_name = ensure_case(case_name)
     paths = dirs(case_name)
-    metadata = read_candidate_metadata(case_name)
-    csv_path = paths["case"] / "qc_scores.csv"
+    metadata = metadata or {}
+    csv_path = paths["case"] / csv_name
     if not csv_path.exists():
-        return "Run QC scoring first.", image_paths(paths["train"])
+        return "Run QC scoring first.", image_paths(paths[dest_key])
     df = pd.read_csv(csv_path)
     df = df[df["passed"] == True].sort_values(["identity_score", "sharpness"], ascending=[False, False]).head(int(top_n))
-    for existing in paths["train"].glob("*"):
+    for existing in paths[dest_key].glob("*"):
         if existing.is_file():
             existing.unlink()
     copied = 0
@@ -166,7 +170,7 @@ def auto_select(case_name, top_n):
         src = Path(row["file"])
         if not src.exists():
             continue
-        dest = paths["train"] / f"{copied + 1:04d}.png"
+        dest = paths[dest_key] / f"{copied + 1:04d}.png"
         with Image.open(src) as img:
             ImageOps.exif_transpose(img).convert("RGB").save(dest)
         source_metadata = metadata.get(str(src)) or metadata.get(src.name) or metadata.get(str(row.get("name", "")))
@@ -175,7 +179,11 @@ def auto_select(case_name, top_n):
                 json.dumps({**source_metadata, "selected_source_file": str(src), "selected_name": dest.name}, indent=2, sort_keys=True)
             )
         copied += 1
-    return f"Selected {copied} training images into {paths['train']}.", image_paths(paths["train"])
+    return f"Selected {copied} training images into {paths[dest_key]}.", image_paths(paths[dest_key])
+
+
+def auto_select(case_name, top_n):
+    return auto_select_from_csv(case_name, "qc_scores.csv", "train", top_n, read_candidate_metadata(case_name))
 
 
 def score_select_pipeline(case_name, identity_threshold, min_face_area, top_n):
@@ -184,3 +192,19 @@ def score_select_pipeline(case_name, identity_threshold, min_face_area, top_n):
         return score_status, df, qc_sheet(case_name, top_n=top_n), train_sheet(case_name)
     select_status, _ = auto_select(case_name, top_n)
     return f"{score_status}\n{select_status}", df, qc_sheet(case_name, top_n=top_n), train_sheet(case_name)
+
+
+def score_final_candidates(case_name, identity_threshold, min_face_area):
+    return score_image_folder(case_name, "production_candidates", "final_qc_scores.csv", "Z-Image production candidates", identity_threshold, min_face_area)
+
+
+def auto_select_final(case_name, top_n):
+    return auto_select_from_csv(case_name, "final_qc_scores.csv", "final", top_n)
+
+
+def score_select_final_pipeline(case_name, identity_threshold, min_face_area, top_n):
+    score_status, df = score_final_candidates(case_name, identity_threshold, min_face_area)
+    if df is None:
+        return score_status, df, image_paths(dirs(case_name)["final"])
+    select_status, selected = auto_select_final(case_name, top_n)
+    return f"{score_status}\n{select_status}", df, selected

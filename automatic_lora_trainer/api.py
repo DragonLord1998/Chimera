@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from .captioning import caption_curated, preview_captions
 from .dashboard import expected_interval_steps, training_progress
-from .face_qc import FaceQcUnavailable, score_candidates, score_select_pipeline
+from .face_qc import FaceQcUnavailable, score_candidates, score_select_final_pipeline, score_select_pipeline
 from .generation import GenerationUnavailable, generate_candidates, import_candidates, smoke_generate, start_background
 from .media import latest_sample_image, selected_from_qc, training_artifact_steps
 from .paths import clean_slug, create_case, dirs, ensure_case, image_paths, list_cases
@@ -20,6 +20,7 @@ from .settings import AI_TOOLKIT_DIR, IMAGE_EXTS, WORK_ROOT
 from .state import read_log, read_training_state
 from .system import system_stats
 from .training import TrainingUnavailable, build_ai_toolkit_config, prepare_pipeline_training, start_pipeline_training
+from .zimage import ZImageUnavailable, expand_with_zimage_identity_lora, identity_lora_artifacts, train_zimage_identity_lora
 
 
 FIXED_IDENTITY_THRESHOLD = 0.92
@@ -113,6 +114,28 @@ class PipelineRunRequest(BaseModel):
     allow_smoke_fallback: bool = False
 
 
+class ZImageIdentityRequest(BaseModel):
+    trigger: str = DEFAULT_TRIGGER
+    count: int = 1
+    model_name: str = DEFAULT_MODEL_NAME
+    rank: int = DEFAULT_RANK
+    steps: int = DEFAULT_STEPS
+    lr: str = DEFAULT_LR
+    sample_prompts: str = DEFAULT_SAMPLE_PROMPTS
+    sample_every: int = DEFAULT_SAMPLE_EVERY
+    save_every: int = DEFAULT_SAVE_EVERY
+
+
+class ZImageExpansionRequest(BaseModel):
+    trigger: str = DEFAULT_TRIGGER
+    count: int = 5000
+
+
+class FinalQcRequest(BaseModel):
+    min_face_area: float = 0.01
+    top_n: int = DEFAULT_PIPELINE_TOP_N
+
+
 def safe_case_name(case_name: str) -> str:
     return ensure_case(case_name)
 
@@ -170,11 +193,16 @@ def case_payload(case_name: str, top_n: int = 100):
             {**record, "selected": record["path"] in selected}
             for record in image_records(paths["candidates"])
         ],
+        "production_candidates": image_records(paths["production_candidates"]),
         "train": image_records(paths["train"]),
+        "final": image_records(paths["final"]),
+        "identity_lora_artifacts": identity_lora_artifacts(case_name),
         "qc": qc_records,
         "logs": {
             "generate": read_log(case_name, "generate"),
             "train": read_log(case_name, "train"),
+            "zimage_identity_lora": read_log(case_name, "zimage_identity_lora"),
+            "zimage_expansion": read_log(case_name, "zimage_expansion"),
         },
         "dashboard": {
             "current_step": current,
@@ -321,6 +349,48 @@ def create_app() -> FastAPI:
         except TrainingUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {"status": status, "log": log, "state": case_payload(case_name)}
+
+    @app.post("/api/cases/{case_name}/identity-lora/run")
+    def post_identity_lora_run(case_name: str, payload: ZImageIdentityRequest):
+        try:
+            status, artifacts = train_zimage_identity_lora(
+                case_name,
+                payload.trigger,
+                payload.count,
+                {
+                    "ZIMAGE_BASE_MODEL": payload.model_name,
+                    "ZIMAGE_RANK": str(payload.rank),
+                    "ZIMAGE_STEPS": str(payload.steps),
+                    "ZIMAGE_LR": str(payload.lr),
+                    "ZIMAGE_SAMPLE_PROMPTS": payload.sample_prompts,
+                    "ZIMAGE_SAMPLE_EVERY": str(payload.sample_every),
+                    "ZIMAGE_SAVE_EVERY": str(payload.save_every),
+                },
+            )
+        except ZImageUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {"status": status, "artifacts": artifacts, "state": case_payload(case_name)}
+
+    @app.post("/api/cases/{case_name}/zimage-expansion/run")
+    def post_zimage_expansion_run(case_name: str, payload: ZImageExpansionRequest):
+        try:
+            status, candidates = expand_with_zimage_identity_lora(case_name, payload.trigger, payload.count)
+        except ZImageUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {"status": status, "candidates": candidates, "state": case_payload(case_name)}
+
+    @app.post("/api/cases/{case_name}/final-qc/score-select")
+    def post_final_qc_score_select(case_name: str, payload: FinalQcRequest):
+        try:
+            status, df, selected = score_select_final_pipeline(
+                case_name,
+                FIXED_IDENTITY_THRESHOLD,
+                payload.min_face_area,
+                payload.top_n,
+            )
+        except FaceQcUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {"status": status, "qc": dataframe_records(df), "selected": selected, "state": case_payload(case_name, payload.top_n)}
 
     @app.post("/api/cases/{case_name}/pipeline/run")
     def post_pipeline_run(case_name: str, payload: PipelineRunRequest):
