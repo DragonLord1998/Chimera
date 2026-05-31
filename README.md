@@ -15,7 +15,8 @@ After pushing this folder to GitHub, paste the contents of [colab_launcher_cell.
 Change this line:
 
 ```python
-REPO_URL = "https://github.com/philipkavalam/project-chimera.git"
+REPO_URL = "https://github.com/DragonLord1998/Chimera.git"
+BRANCH = "project-chimera-react"
 ```
 
 Then run the cell. It will:
@@ -40,7 +41,7 @@ The only supported access point is the printed Colab proxy URL. The backend bind
 In a Colab terminal:
 
 ```bash
-git clone https://github.com/philipkavalam/project-chimera.git /content/project-chimera
+git clone --depth 1 --branch project-chimera-react https://github.com/DragonLord1998/Chimera.git /content/project-chimera
 bash /content/project-chimera/colab_lora_factory.sh
 ```
 

@@ -5,7 +5,7 @@ Paste this into one Colab notebook cell after you push this project to GitHub.
 Replace `REPO_URL` with your repository clone URL, for example:
 
 ```text
-https://github.com/philipkavalam/project-chimera.git
+https://github.com/DragonLord1998/Chimera.git
 ```
 
 ```python
@@ -17,8 +17,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-REPO_URL = "https://github.com/philipkavalam/project-chimera.git"
-BRANCH = ""  # leave empty to use the repo default branch, or set "main"
+REPO_URL = "https://github.com/DragonLord1998/Chimera.git"
+BRANCH = "project-chimera-react"
 REPO_DIR = Path("/content/project-chimera")
 FRESH_CLONE_EVERY_RUN = True
 PORT = 7860
