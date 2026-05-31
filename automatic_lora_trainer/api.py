@@ -15,6 +15,7 @@ from .face_qc import FaceQcUnavailable, score_candidates, score_select_pipeline
 from .generation import GenerationUnavailable, generate_candidates, import_candidates, smoke_generate, start_background
 from .media import latest_sample_image, selected_from_qc, training_artifact_steps
 from .paths import clean_slug, create_case, dirs, ensure_case, image_paths, list_cases
+from .preflight import runtime_preflight
 from .settings import AI_TOOLKIT_DIR, IMAGE_EXTS, WORK_ROOT
 from .state import read_log, read_training_state
 from .system import system_stats
@@ -200,6 +201,10 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def health():
         return {"ok": True, "work_root": str(WORK_ROOT)}
+
+    @app.get("/api/preflight")
+    def preflight():
+        return runtime_preflight()
 
     @app.get("/api/cases")
     def get_cases():

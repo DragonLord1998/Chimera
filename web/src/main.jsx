@@ -30,11 +30,12 @@ const API = "";
 
 const phases = [
   { id: "ingest", label: "Ingest", eyebrow: "Phase 1" },
-  { id: "seed", label: "Identity Seed", eyebrow: "Phase 2" },
-  { id: "expansion", label: "Synthetic Expansion", eyebrow: "Phase 3" },
-  { id: "qc", label: "Identity QC", eyebrow: "Phase 4" },
-  { id: "library", label: "Dataset Library", eyebrow: "Phase 5" },
-  { id: "factory", label: "Model Factory", eyebrow: "Phase 6" },
+  { id: "pulid-dataset", label: "Flux2-PuLID Dataset", eyebrow: "Phase 2" },
+  { id: "strict-qc", label: "Strict QC", eyebrow: "Phase 3" },
+  { id: "identity-lora", label: "Identity LoRA", eyebrow: "Phase 4" },
+  { id: "zimage-expansion", label: "Z-Image Expansion", eyebrow: "Phase 5" },
+  { id: "final-qc", label: "Very Strict QC", eyebrow: "Phase 6" },
+  { id: "factory", label: "Other Model LoRAs", eyebrow: "Phase 7" },
 ];
 
 const defaultGenerationCommand = `# The backend sets REF_DIR, CANDIDATE_DIR, CASE_DIR, COUNT, and TRIGGER.
@@ -334,6 +335,25 @@ function MetricTile({ icon: Icon, label, value }) {
   );
 }
 
+function ReadinessList({ preflight }) {
+  const items = preflight?.items || [];
+  return (
+    <div className="readiness-list">
+      {items.map((item) => (
+        <div key={item.key} className={cx("readiness-item", item.ok ? "ok" : "blocked")}>
+          {item.ok ? <CheckCircle2 size={16} /> : <Gauge size={16} />}
+          <span>
+            <strong>{item.label}</strong>
+            <small>{item.detail || "n/a"}</small>
+          </span>
+          <b>{item.ok ? "Ready" : "Needs setup"}</b>
+        </div>
+      ))}
+      {items.length === 0 && <div className="empty-state">Runtime checks have not loaded yet</div>}
+    </div>
+  );
+}
+
 function ImageGallery({ title, items = [], qcByPath, selected = false, empty = "No images yet", compact = false }) {
   return (
     <SurfaceCard title={title} icon={Library} className={compact ? "compact-card" : ""}>
@@ -391,7 +411,7 @@ function PromptCards({ promptsText, dashboard, steps, sampleEvery }) {
   );
 }
 
-function TrainingOverview({ dashboard, training, samplePrompts, configPath, onPrepare, onStart, onRefresh, busy }) {
+function TrainingOverview({ dashboard, training, samplePrompts, configPath, onPrepare, onStart, onRefresh, busy, title = "Training Progress", startLabel = "Start Training", startDisabled = false, notice = "" }) {
   const current = dashboard?.current_step;
   const total = dashboard?.total_steps || training.steps;
   const percent = clampPercent(dashboard?.percent || 0);
@@ -400,7 +420,8 @@ function TrainingOverview({ dashboard, training, samplePrompts, configPath, onPr
   const stepText = current == null ? "waiting for ai-toolkit step report" : `${current}/${total} steps`;
 
   return (
-    <SurfaceCard title="Training Progress" icon={Activity} className="training-card">
+    <SurfaceCard title={title} icon={Activity} className="training-card">
+      {notice && <div className="readiness-banner blocked">{notice}</div>}
       <div className="progress-summary">
         <div>
           <span>{stepText}</span>
@@ -442,8 +463,8 @@ function TrainingOverview({ dashboard, training, samplePrompts, configPath, onPr
         <button onClick={onPrepare} disabled={busy}>
           <Save size={16} /> Caption + Config
         </button>
-        <button onClick={onStart} disabled={busy || !configPath} className="primary">
-          <Play size={16} /> Start Training
+        <button onClick={onStart} disabled={busy || !configPath || startDisabled} className="primary">
+          <Play size={16} /> {startLabel}
         </button>
         <button onClick={onRefresh} disabled={busy}>
           <RefreshCcw size={16} /> Refresh
@@ -453,13 +474,13 @@ function TrainingOverview({ dashboard, training, samplePrompts, configPath, onPr
   );
 }
 
-function IngestPhase({ state, files, setFiles, consent, setConsent, busy, onRunPipeline, caseLabel, setCaseLabel, count, setCount, qc, setQc, training, setTraining }) {
+function IngestPhase({ state, preflight, files, setFiles, consent, setConsent, busy, onRunPipeline, onRefreshPreflight, caseLabel, setCaseLabel, count, setCount, qc, setQc, training, setTraining }) {
   return (
     <>
       <PageHeader
         eyebrow="Phase 1: Ingest"
         title="Upload One Photo"
-        description="Review the run settings, upload one clear reference, then Chimera uses the configured Flux2-PuLID generator before QC and LoRA training."
+        description="Review the run settings, upload one clear reference, then Chimera uses the configured Flux2-PuLID generator to build the seed dataset before strict QC."
       />
       <section className="ingest-layout">
         <div className="main-stack">
@@ -476,8 +497,8 @@ function IngestPhase({ state, files, setFiles, consent, setConsent, busy, onRunP
                 <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
                 I have consent and rights to train this identity
               </label>
-              <button className="primary" disabled={busy || !files.length || !consent} onClick={onRunPipeline}>
-                <UploadCloud size={16} /> Run Full Pipeline
+              <button className="primary" disabled={busy || !files.length || !consent || preflight?.ready !== true} onClick={onRunPipeline}>
+                <UploadCloud size={16} /> Run Seed Pipeline
               </button>
             </div>
           </SurfaceCard>
@@ -512,6 +533,16 @@ function IngestPhase({ state, files, setFiles, consent, setConsent, busy, onRunP
         </div>
 
         <div className="side-stack">
+          <SurfaceCard
+            title="Runtime Readiness"
+            icon={ShieldCheck}
+            action={<button className="ghost-button" type="button" onClick={onRefreshPreflight} disabled={busy}><RefreshCcw size={14} /> Check</button>}
+          >
+            <div className={cx("readiness-banner", preflight?.ready ? "ready" : "blocked")}>
+              {preflight?.ready ? "Ready for one-click run" : "Setup required before one-click run"}
+            </div>
+            <ReadinessList preflight={preflight} />
+          </SurfaceCard>
           <SurfaceCard title="Run Settings" icon={SlidersHorizontal}>
             <div className="grid-form compact-form">
               <label className="wide">Generator <input value="Flux2-PuLID" readOnly /></label>
@@ -557,9 +588,9 @@ function SeedPhase({ state, dashboard, training, setTraining, samplePrompts, set
   return (
     <>
       <PageHeader
-        eyebrow="Phase 2: Identity Seed"
-        title="Identity LoRA Training Settings"
-        description="The identity LoRA is trained from the curated Flux2-PuLID synthetic dataset after strict QC."
+        eyebrow="Phase 4: Identity LoRA"
+        title="Train Identity LoRA For Z-Image Turbo"
+        description="This stage consumes the strict-QC curated Flux2-PuLID seed dataset. The current training action uses the selected ai-toolkit config; dedicated Z-Image Turbo adapter support still needs backend work."
         actions={<span className="state-chip">{configPath ? "Config ready" : "Config pending"}</span>}
       />
       <section className="bento two-col">
@@ -572,12 +603,16 @@ function SeedPhase({ state, dashboard, training, setTraining, samplePrompts, set
           onPrepare={onPrepare}
           onStart={onStart}
           onRefresh={onRefresh}
+          title="Identity LoRA Progress"
+          startLabel="Start Z-Image Turbo LoRA"
+          startDisabled
+          notice="Dedicated Z-Image Turbo LoRA training is not wired yet. Caption + Config currently prepares the existing ai-toolkit config only."
         />
         <div className="side-stack">
-          <SurfaceCard title="Seed Parameters" icon={SlidersHorizontal}>
+          <SurfaceCard title="Current Config Parameters" icon={SlidersHorizontal}>
             <div className="grid-form">
               <label>Trigger <input value={training.trigger} onChange={(event) => setTraining({ ...training, trigger: event.target.value })} /></label>
-              <label>Base model <input value={training.model_name} onChange={(event) => setTraining({ ...training, model_name: event.target.value })} /></label>
+              <label>Current backend model <input value={training.model_name} onChange={(event) => setTraining({ ...training, model_name: event.target.value })} /></label>
               <label>Rank <input type="number" value={training.rank} onChange={(event) => setTraining({ ...training, rank: Number(event.target.value) })} /></label>
               <label>Steps <input type="number" value={training.steps} onChange={(event) => setTraining({ ...training, steps: Number(event.target.value) })} /></label>
               <label>Learning rate <input value={training.lr} onChange={(event) => setTraining({ ...training, lr: event.target.value })} /></label>
@@ -605,9 +640,9 @@ function ExpansionPhase({ state, count, setCount, importFolder, setImportFolder,
   return (
     <>
       <PageHeader
-        eyebrow="Phase 3: Synthetic Expansion"
-        title="Generate Candidate Pool"
-        description="Production generation uses Flux2-PuLID through the configured backend command. The local smoke generator is only for development validation."
+        eyebrow="Phase 2: Flux2-PuLID Dataset"
+        title="Generate The Seed Candidate Dataset"
+        description="Production generation uses Flux2-PuLID from the original references. This creates the first identity-preserving candidate pool before any LoRA is trained."
       />
       <section className="bento two-col">
         <div className="main-stack">
@@ -628,7 +663,7 @@ function ExpansionPhase({ state, count, setCount, importFolder, setImportFolder,
           <ImageGallery title="Synthetic Candidates" items={state?.candidates || []} empty="Generated or imported candidates will appear here" />
         </div>
         <div className="side-stack">
-          <SurfaceCard title="Expansion Summary" icon={Database}>
+          <SurfaceCard title="Seed Dataset Summary" icon={Database}>
             <div className="stat-row vertical">
               <StatPill label="Candidates" value={state?.candidates?.length || 0} />
               <StatPill label="Accepted" value={state?.candidates?.filter((item) => item.selected).length || 0} tone="good" />
@@ -656,9 +691,9 @@ function QcPhase({ state, qc, setQc, qcSummary, qcByPath, busy, onScoreSelect, d
   return (
     <>
       <PageHeader
-        eyebrow="Phase 4: Identity QC"
-        title="Identity Auditing"
-        description="Review synthetic expansions against source anchors using real QC scores from the current backend."
+        eyebrow="Phase 3: Strict QC"
+        title="Strict QC Against Original References"
+        description="Filter the Flux2-PuLID seed dataset against the original reference anchors before training the identity LoRA."
         actions={<button disabled={busy} onClick={onScoreSelect}><SlidersHorizontal size={16} /> Score + Select</button>}
       />
       <section className="qc-layout">
@@ -695,13 +730,108 @@ function QcPhase({ state, qc, setQc, qcSummary, qcByPath, busy, onScoreSelect, d
   );
 }
 
+function ZImageExpansionPhase({ state, dashboard }) {
+  const stats = dashboard?.stats || {};
+  return (
+    <>
+      <PageHeader
+        eyebrow="Phase 5: Z-Image Expansion"
+        title="Massive Dataset From The Identity LoRA"
+        description="After the Z-Image Turbo identity LoRA exists, this stage expands from the small curated seed set into the large production candidate dataset."
+        actions={<span className="state-chip">Backend pending</span>}
+      />
+      <section className="bento two-col">
+        <div className="main-stack">
+          <SurfaceCard title="Expansion Source" icon={Layers}>
+            <div className="summary-list">
+              <span>Original references <b>{state?.refs?.length || 0}</b></span>
+              <span>Seed candidates <b>{state?.candidates?.length || 0}</b></span>
+              <span>Strict-QC curated seed images <b>{state?.train?.length || 0}</b></span>
+              <span>Required identity LoRA <b>{dashboard?.artifacts?.checkpoint_files?.length ? "checkpoint available" : "n/a"}</b></span>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Production Dataset" icon={Wand2}>
+            <div className="empty-state">
+              Z-Image Turbo expansion is not wired yet. This panel will stay empty until the backend has a real identity-LoRA inference job and output folder.
+            </div>
+          </SurfaceCard>
+        </div>
+        <div className="side-stack">
+          <SurfaceCard title="Readiness" icon={ShieldCheck}>
+            <div className="summary-list">
+              <span>Identity LoRA config <b>{state?.config_path ? "ready" : "n/a"}</b></span>
+              <span>Training state <b>{dashboard?.training_state?.status || "n/a"}</b></span>
+              <span>Target raw images <b>5000</b></span>
+              <span>Actual generated images <b>0</b></span>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Node Telemetry" icon={Activity}>
+            <div className="telemetry-grid single">
+              <MetricTile icon={Activity} label="GPU" value={stats.gpu} />
+              <MetricTile icon={Gauge} label="VRAM" value={stats.vram_used} />
+              <MetricTile icon={Zap} label="Power" value={stats.power} />
+            </div>
+          </SurfaceCard>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function FinalQcPhase({ state, qcSummary, dashboard }) {
+  const stats = dashboard?.stats || {};
+  return (
+    <>
+      <PageHeader
+        eyebrow="Phase 6: Very Strict QC"
+        title="Audit The Z-Image Production Dataset"
+        description="This second-pass QC will run after Z-Image Turbo expands the identity LoRA into the large production pool. It is separate from the first strict QC gate."
+        actions={<span className="state-chip">Backend pending</span>}
+      />
+      <section className="qc-layout">
+        <div className="main-stack">
+          <SurfaceCard title="Final Audit Grid" icon={ShieldCheck}>
+            <div className="empty-state">
+              No Z-Image production candidates exist yet. Current QC rows belong to the Flux2-PuLID seed dataset.
+            </div>
+          </SurfaceCard>
+        </div>
+        <div className="side-stack">
+          <SurfaceCard title="Existing Seed QC" icon={Database}>
+            <div className="summary-list">
+              <span>Seed evaluated <b>{qcSummary.total}</b></span>
+              <span>Seed passed <b>{qcSummary.passed}</b></span>
+              <span>Seed failed <b>{qcSummary.failed}</b></span>
+              <span>Curated seed images <b>{state?.train?.length || 0}</b></span>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Final QC Inputs" icon={Gauge}>
+            <div className="summary-list">
+              <span>Z-Image raw images <b>0</b></span>
+              <span>Duplicate pass <b>n/a</b></span>
+              <span>Manual review <b>n/a</b></span>
+              <span>Final dataset <b>0</b></span>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Node Telemetry" icon={Cpu}>
+            <div className="telemetry-grid single">
+              <MetricTile icon={Activity} label="GPU" value={stats.gpu} />
+              <MetricTile icon={Gauge} label="VRAM" value={stats.vram_used} />
+            </div>
+          </SurfaceCard>
+        </div>
+      </section>
+    </>
+  );
+}
+
 function LibraryPhase({ state, training, setTraining, samplePrompts, setSamplePrompts, busy, onPrepare }) {
   return (
     <>
       <PageHeader
-        eyebrow="Phase 5: Dataset Library"
-        title="Curated Character Dataset"
-        description="The accepted identity set becomes the reusable source for downstream LoRA training."
+        eyebrow="Dataset Utility"
+        title="Curated Seed Character Dataset"
+        description="The accepted Flux2-PuLID seed set is the input for the Z-Image Turbo identity LoRA stage."
         actions={<button className="primary" disabled={busy} onClick={onPrepare}><Save size={16} /> Caption + Config</button>}
       />
       <section className="bento two-col">
@@ -739,9 +869,9 @@ function FactoryPhase({ state, dashboard, training, setTraining, configPath, sam
   return (
     <>
       <PageHeader
-        eyebrow="Phase 6: Model Factory"
-        title="Model Adapter Factory"
-        description="Configure multi-target adapter runs. Only the current ai-toolkit config is actionable in this frontend pass."
+        eyebrow="Phase 7: Other Model LoRAs"
+        title="LoRA Generation For Other Models"
+        description="After the very-strict final dataset exists, this stage trains model-specific LoRAs. Only the current selected ai-toolkit config is actionable in this frontend pass."
       />
       <section className="bento two-col">
         <div className="main-stack">
@@ -939,6 +1069,7 @@ function App() {
   const [caseLabel, setCaseLabel] = useState("character");
   const [state, setState] = useState(null);
   const [status, setStatus] = useState("");
+  const [preflight, setPreflight] = useState(null);
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState([]);
   const [consent, setConsent] = useState(false);
@@ -1003,6 +1134,12 @@ function App() {
     setState({ ...payload, configPath: payload.config_path || "" });
   }
 
+  async function loadPreflight() {
+    const payload = await request("/api/preflight");
+    setPreflight(payload);
+    return payload;
+  }
+
   async function runAction(action) {
     setBusy(true);
     try {
@@ -1024,6 +1161,7 @@ function App() {
 
   useEffect(() => {
     loadCases().catch((error) => setStatus(error.message));
+    loadPreflight().catch((error) => setStatus(error.message));
   }, []);
 
   useEffect(() => {
@@ -1073,7 +1211,7 @@ function App() {
           top_n: qc.top_n,
           min_face_area: qc.min_face_area,
           sample_prompts: samplePrompts,
-          start_training: true,
+          start_training: false,
           generation_backend: "flux2_pulid",
           allow_smoke_fallback: false,
         }),
@@ -1095,6 +1233,10 @@ function App() {
       body: JSON.stringify({ config_path: configPath, trigger: training.trigger, steps: training.steps, sample_prompts: samplePrompts, sample_every: training.sample_every, save_every: training.save_every }),
     })),
     refresh: () => loadState(),
+    refreshPreflight: () => runAction(async () => {
+      const payload = await loadPreflight();
+      return { status: payload.ready ? "Runtime readiness check passed." : "Runtime readiness check found setup issues." };
+    }),
   };
 
   const phaseProps = { state, dashboard, busy, training, setTraining, samplePrompts, setSamplePrompts, configPath };
@@ -1102,12 +1244,14 @@ function App() {
     ingest: (
       <IngestPhase
         state={state}
+        preflight={preflight}
         files={files}
         setFiles={setFiles}
         consent={consent}
         setConsent={setConsent}
         busy={busy}
         onRunPipeline={actions.runFullPipeline}
+        onRefreshPreflight={actions.refreshPreflight}
         caseLabel={caseLabel}
         setCaseLabel={setCaseLabel}
         count={count}
@@ -1118,15 +1262,7 @@ function App() {
         setTraining={setTraining}
       />
     ),
-    seed: (
-      <SeedPhase
-        {...phaseProps}
-        onPrepare={actions.prepare}
-        onStart={actions.startTraining}
-        onRefresh={actions.refresh}
-      />
-    ),
-    expansion: (
+    "pulid-dataset": (
       <ExpansionPhase
         state={state}
         count={count}
@@ -1142,7 +1278,7 @@ function App() {
         dashboard={dashboard}
       />
     ),
-    qc: (
+    "strict-qc": (
       <QcPhase
         state={state}
         qc={qc}
@@ -1151,6 +1287,27 @@ function App() {
         qcByPath={qcByPath}
         busy={busy}
         onScoreSelect={actions.scoreSelect}
+        dashboard={dashboard}
+      />
+    ),
+    "identity-lora": (
+      <SeedPhase
+        {...phaseProps}
+        onPrepare={actions.prepare}
+        onStart={actions.startTraining}
+        onRefresh={actions.refresh}
+      />
+    ),
+    "zimage-expansion": (
+      <ZImageExpansionPhase
+        state={state}
+        dashboard={dashboard}
+      />
+    ),
+    "final-qc": (
+      <FinalQcPhase
+        state={state}
+        qcSummary={qcSummary}
         dashboard={dashboard}
       />
     ),
@@ -1200,7 +1357,7 @@ function App() {
         training={training}
         onClose={closeUtilityView}
         onRefresh={actions.refresh}
-        onOpenLibrary={() => changePhase("library")}
+        onOpenLibrary={() => changeUtilityView("datasets")}
       />
       {phase}
     </AppShell>

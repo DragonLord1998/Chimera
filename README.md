@@ -2,7 +2,7 @@
 
 Project Chimera is a Colab Pro+ web app for building high-trust identity LoRA datasets and then training identity LoRAs for multiple image/video model families.
 
-This branch is the Colab proxy-only implementation. The existing `main` branch in `DragonLord1998/Chimera` may contain older RunPod work; this branch does not depend on that implementation.
+`main` is the Colab proxy-only implementation. Older RunPod work is merge history only; the active product direction is this React + FastAPI Colab app.
 
 ## Core Idea
 
@@ -10,15 +10,15 @@ The workflow is intentionally staged:
 
 ```text
 1-3 real reference images
--> strict seed curation
 -> Flux2-PuLID identity-preserving synthetic generation
--> generate 5000 synthetic candidates with prompt metadata
--> strict identity QC against the original references
--> curated character dataset
--> train the identity LoRA and downstream model-specific LoRAs
+-> strict QC against the original references
+-> train a Z-Image Turbo identity LoRA from the curated seed dataset
+-> use the Z-Image Turbo identity LoRA to generate the massive production dataset
+-> very strict QC on the massive production dataset
+-> train LoRAs for other model families from the final curated dataset
 ```
 
-Flux2-PuLID is the first expansion engine. It creates the initial synthetic candidate pool from the user references before the identity LoRA is trained. The final source of truth remains the original user-provided identity references plus strict QC.
+Flux2-PuLID is the first expansion engine. It creates the initial synthetic seed candidate pool from the user references before the identity LoRA is trained. The final source of truth remains the original user-provided identity references plus strict QC.
 
 ## Current Implementation Boundary
 
@@ -28,6 +28,7 @@ What is wired today:
 
 - Upload references through the FastAPI `/references` endpoint.
 - Run Flux2-PuLID generation through `FLUX2_PULID_COMMAND`; the command receives `REF_DIR`, `CANDIDATE_DIR`, `COUNT`, `TRIGGER`, and `PROMPT_MANIFEST`.
+- Check runtime readiness before starting the one-click seed pipeline.
 - Generate a small local candidate set with the built-in reference augmentation generator only through the explicit dev smoke path.
 - Score and select candidates with InsightFace/ArcFace identity QC fixed at `0.92`.
 - Preserve prompt-bucket metadata through QC into sidecar JSON.
@@ -35,6 +36,13 @@ What is wired today:
 - Build and start an Ostris `ai-toolkit` LoRA config for `black-forest-labs/FLUX.2-klein-base-9B`.
 
 If `FLUX2_PULID_COMMAND` is missing, the production pipeline returns a setup error instead of silently using fake generation.
+
+What is not wired yet:
+
+- Dedicated Z-Image Turbo identity LoRA training adapter.
+- Massive generation from the Z-Image Turbo identity LoRA.
+- Very-strict second-pass QC over the Z-Image production dataset.
+- Final multi-model LoRA training jobs for FLUX, Z-Image Base, Wan, and LTX.
 
 The Colab launcher now prepares the expected runtime:
 
@@ -48,12 +56,15 @@ Important: `FLUX2_PULID_WORKFLOW` must point to a real ComfyUI API-format Flux2-
 
 ## Why This Plan
 
-Training a final LoRA directly from 1-3 images is fragile. It can overfit pose, lighting, expression, camera angle, or clothing. Project Chimera instead uses a two-stage approach:
+Training a final LoRA directly from 1-3 images is fragile. It can overfit pose, lighting, expression, camera angle, or clothing. Project Chimera instead uses a staged bootstrapping approach:
 
 1. Use Flux2-PuLID to generate many controlled identity-preserving variations from the references.
 2. Filter aggressively against the original references.
-3. Caption accepted images as a character LoRA dataset.
-4. Train the identity LoRA and downstream LoRAs from the filtered dataset.
+3. Caption accepted images as a character LoRA seed dataset.
+4. Train the first identity LoRA for Z-Image Turbo.
+5. Use that Z-Image Turbo identity LoRA to produce the larger production dataset.
+6. Run a very strict second QC pass.
+7. Train downstream model-specific LoRAs from the final filtered dataset.
 
 The key rule is that synthetic images are never trusted just because Flux2-PuLID generated them. Every accepted image must pass identity checks against the original references.
 
@@ -78,7 +89,7 @@ Goal:
 
 - Clean reference anchors for identity-preserving synthetic generation and QC.
 
-### Phase 2: Flux2-PuLID Synthetic Seed
+### Phase 2: Flux2-PuLID Seed Dataset
 
 The first expansion target is Flux2-PuLID because it preserves identity from reference images without requiring a LoRA first.
 
@@ -90,42 +101,9 @@ The intended generation contract:
 - Output filenames should match the manifest `output_name` values where possible.
 - Prompt metadata is saved into `candidate_metadata.jsonl`.
 
-### Phase 3: Synthetic Expansion
+### Phase 3: Strict QC
 
-Flux2-PuLID creates a large raw candidate pool:
-
-```text
-references + Flux2-PuLID + prompt manifest -> 5000 candidate images
-```
-
-The 5000 number is a raw generation target, not a final dataset size. The app should expect most generated images to be discarded.
-
-Generation should be prompt-diverse:
-
-- Front face portrait.
-- Side profile.
-- Three-quarter view.
-- Full body.
-- Indoor natural light.
-- Outdoor natural light.
-- Low light.
-- Studio lighting.
-- Different expressions.
-- Different hair/clothing contexts where identity should remain stable.
-- Plain backgrounds for clean face evaluation.
-- Scene prompts that test whether identity survives context changes.
-
-Generation should also be controlled:
-
-- Fixed prompt buckets.
-- Fixed negative prompts.
-- Fixed seeds where useful for checkpoint comparison.
-- Balanced number of candidates per prompt category.
-- Metadata saved for each image: prompt, seed, model, LoRA checkpoint, LoRA strength, timestamp.
-
-### Phase 4: Strict Identity QC
-
-Strict QC is the most important part of the system.
+Strict QC is the most important part of the seed stage.
 
 Accepted images must be scored against the original reference images, not only against other synthetic images. This prevents identity drift from becoming self-reinforcing.
 
@@ -156,11 +134,60 @@ Rejected examples should be preserved with rejection reasons:
 - `artifact`
 - `manual_reject`
 
-The final curated dataset should usually be much smaller than 5000. The goal is not maximum volume; the goal is a high-trust, diverse identity dataset.
+The curated seed dataset should usually be much smaller than the raw Flux2-PuLID candidate count. The goal is not maximum volume; the goal is a high-trust, diverse identity seed dataset.
 
-### Phase 5: Curated Character Dataset
+### Phase 4: Identity LoRA For Z-Image Turbo
 
-The curated dataset becomes the reusable source for downstream training.
+The first LoRA trained by the system should be an identity LoRA for Z-Image Turbo.
+
+This LoRA is not the final product. It is a bootstrapping tool used to generate a much larger production dataset with better consistency and broader coverage than Flux2-PuLID alone.
+
+The seed LoRA training input is:
+
+```text
+references + Flux2-PuLID seed candidates + strict QC -> curated seed character dataset
+```
+
+Current implementation note: the frontend names this stage correctly, but dedicated Z-Image Turbo training adapter support is still backend work. Until that exists, the app must not claim that a real Z-Image Turbo identity LoRA has been trained.
+
+### Phase 5: Massive Dataset From Z-Image Turbo Identity LoRA
+
+After the Z-Image Turbo identity LoRA exists, it becomes the expansion engine for the large production pool:
+
+```text
+Z-Image Turbo + identity LoRA + prompt manifest -> 5000 raw production candidates
+```
+
+The 5000 number is a raw generation target, not a final dataset size. The app should expect most generated images to be discarded.
+
+Generation should be prompt-diverse:
+
+- Front face portrait.
+- Side profile.
+- Three-quarter view.
+- Full body.
+- Indoor natural light.
+- Outdoor natural light.
+- Low light.
+- Studio lighting.
+- Different expressions.
+- Different hair/clothing contexts where identity should remain stable.
+- Plain backgrounds for clean face evaluation.
+- Scene prompts that test whether identity survives context changes.
+
+Generation should also be controlled:
+
+- Fixed prompt buckets.
+- Fixed negative prompts.
+- Fixed seeds where useful for checkpoint comparison.
+- Balanced number of candidates per prompt category.
+- Metadata saved for each image: prompt, seed, model, LoRA checkpoint, LoRA strength, timestamp.
+
+### Phase 6: Very Strict QC
+
+The massive Z-Image production dataset gets a stricter second QC pass. This pass should compare every generated image back to the original references and also reject drift that appears only after repeated synthetic expansion.
+
+The final curated dataset becomes the reusable source for downstream training.
 
 Each accepted image should have:
 
@@ -189,15 +216,14 @@ For character LoRAs, captions should follow these rules:
 - Do not write permanent identity traits into every caption. Identity is learned from pixels and enforced by QC, not by text like face shape or ethnicity.
 - Keep any constant suffix short and optional. Repeating broad quality tags on every image can bind style to the identity.
 
-### Phase 6: Model Adapter Factory
+### Phase 7: LoRA Generation For Other Models
 
 Once the curated identity dataset is ready, Project Chimera trains separate LoRAs for each target model family.
 
 Planned targets:
 
-- Z-Image Turbo LoRA.
-- Z-Image Base LoRA.
 - FLUX LoRA.
+- Z-Image Base LoRA.
 - Wan LoRA.
 - LTX LoRA.
 
@@ -223,7 +249,8 @@ The current React + FastAPI app already provides the foundation:
 
 - Upload 1-3 reference images.
 - Store cases under Google Drive.
-- Run the one-photo production workflow: reference upload, Flux2-PuLID candidate generation, QC selection, captions, config creation, and training preflight.
+- Run the current seed pipeline: reference upload, Flux2-PuLID candidate generation, strict QC selection, captions, config creation, and training preflight.
+- Block the seed pipeline when runtime preflight detects missing Flux2-PuLID, ComfyUI, face-QC, work-root, or ai-toolkit setup.
 - Import or generate candidate images.
 - Run face identity QC at the fixed `0.92` identity threshold.
 - Highlight QC-selected candidates.
@@ -239,15 +266,13 @@ The current React + FastAPI app already provides the foundation:
 
 Planned next implementation work:
 
-- Add the Colab notebook installer cell for the chosen Flux2-PuLID runtime.
-- Add a dedicated Z-Image Turbo seed LoRA config preset.
+- Replace the placeholder Flux2-PuLID workflow file with a real ComfyUI API workflow export.
 - Add Z-Image Turbo training adapter handling.
-- Add a 5000-image expansion job type.
-- Add prompt-bucket generation metadata.
-- Add stricter multi-pass QC.
+- Add massive Z-Image Turbo identity-LoRA expansion job handling.
+- Add very-strict second-pass QC.
 - Add duplicate removal.
 - Add manual review/accept/reject UI.
-- Add per-model LoRA target presets.
+- Add final per-model LoRA training targets.
 - Add model comparison reports.
 
 ## Training Dashboard
@@ -293,7 +318,7 @@ The launcher uses:
 
 ```python
 REPO_URL = "https://github.com/DragonLord1998/Chimera.git"
-BRANCH = "project-chimera-react"
+BRANCH = "main"
 ```
 
 Then run the cell. It will:
@@ -316,7 +341,7 @@ FRESH_CLONE_EVERY_RUN = True
 In a Colab terminal:
 
 ```bash
-git clone --depth 1 --branch project-chimera-react https://github.com/DragonLord1998/Chimera.git /content/project-chimera
+git clone --depth 1 --branch main https://github.com/DragonLord1998/Chimera.git /content/project-chimera
 bash /content/project-chimera/colab_lora_factory.sh
 ```
 
@@ -370,9 +395,11 @@ automatic_lora_trainer/
   paths.py        # case folders and image discovery
   state.py        # logs, running processes, training_state.json
   generation.py   # reference upload, imports, smoke generation, command runner
+  flux2_pulid_runner.py # ComfyUI API bridge for Flux2-PuLID candidate generation
   face_qc.py      # InsightFace/AuraFace identity scoring and dataset selection
   captioning.py   # training captions and caption preview
   training.py     # ai-toolkit config and tracked training process
+  preflight.py    # runtime readiness checks before one-click seed runs
   dashboard.py    # progress dashboard and prompt sample status
   media.py        # image previews and artifact discovery
   system.py       # CPU/RAM/GPU/VRAM/power stats
