@@ -47,10 +47,11 @@ os.chmod(script_path, 0o755)
 
 env = os.environ.copy()
 env["PORT"] = str(PORT)
+env["HOST"] = "127.0.0.1"
 
 print(f"Launching: {script_path}")
 print("Watch the output below for the Colab proxy URL.")
 subprocess.run(["bash", str(script_path)], check=True, env=env)
 ```
 
-The app is served through FastAPI on the Colab proxy URL printed by the startup output.
+The app is served through FastAPI on localhost. The only access point is the Colab proxy URL printed by the startup output.

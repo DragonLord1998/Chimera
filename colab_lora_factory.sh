@@ -8,7 +8,7 @@ AI_TOOLKIT_DIR="${AI_TOOLKIT_DIR:-/content/ai-toolkit}"
 WORK_ROOT="${WORK_ROOT:-/content/drive/MyDrive/GenAI/Project Chimera}"
 FALLBACK_WORK_ROOT="${FALLBACK_WORK_ROOT:-/content/Project Chimera}"
 PORT="${PORT:-7860}"
-HOST="${HOST:-0.0.0.0}"
+HOST="${HOST:-127.0.0.1}"
 INSTALL_FRONTEND="${INSTALL_FRONTEND:-1}"
 INSTALL_FACE_QC="${INSTALL_FACE_QC:-1}"
 INSTALL_AI_TOOLKIT="${INSTALL_AI_TOOLKIT:-1}"
@@ -16,6 +16,11 @@ INSTALL_TORCH="${INSTALL_TORCH:-0}"
 FACE_MODEL="${FACE_MODEL:-auraface}"
 
 echo "[chimera] Preparing Project Chimera..."
+
+if [[ "$HOST" != "127.0.0.1" && "$HOST" != "localhost" ]]; then
+  echo "[chimera] Refusing HOST=${HOST}. Project Chimera is proxy-only and must bind to localhost."
+  exit 1
+fi
 
 if [[ -d /content && ! -d /content/drive/MyDrive ]]; then
   echo "[chimera] Google Drive is not mounted. Trying drive.mount()."
@@ -81,7 +86,7 @@ fi
 
 echo "[chimera] Starting app on ${HOST}:${PORT}."
 echo "[chimera] Work root: ${WORK_ROOT}"
-echo "[chimera] Open the Colab proxy URL printed by the Python server."
+echo "[chimera] Proxy-only mode: open the Colab proxy URL printed by the Python server."
 
 export AI_TOOLKIT_DIR
 export WORK_ROOT

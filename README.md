@@ -5,7 +5,7 @@ Repo-based Colab Pro+ launcher for an automatic character LoRA workflow.
 The expected Colab flow is:
 
 ```text
-Mount Drive -> clone this repo fresh -> build the React app -> launch FastAPI -> use the Colab proxy URL
+Mount Drive -> clone this repo fresh -> build the React app -> launch FastAPI on localhost -> use the Colab proxy URL
 ```
 
 ## Run In Colab
@@ -33,7 +33,7 @@ The launcher defaults to a fresh clone on every run:
 FRESH_CLONE_EVERY_RUN = True
 ```
 
-The app is served on the printed Colab proxy URL. There is no separate public share tunnel in this version.
+The only supported access point is the printed Colab proxy URL. The backend binds to `127.0.0.1` and the launcher refuses non-local host bindings. There is no separate public tunnel.
 
 ## Manual Terminal Run
 
@@ -84,6 +84,7 @@ By default, sample prompts run every `250` training steps and checkpoints save e
 
 - Persistent root: `/content/drive/MyDrive/GenAI/Project Chimera`
 - Server port: `7860`
+- Server host: `127.0.0.1`
 - ai-toolkit path: `/content/ai-toolkit`
 - Default base model in the UI: `black-forest-labs/FLUX.2-klein-base-9B`
 
