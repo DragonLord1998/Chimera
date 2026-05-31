@@ -2,23 +2,43 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
+  Bell,
   Check,
+  CheckCircle2,
   Cpu,
   Database,
+  FileText,
   FolderInput,
   Gauge,
   ImagePlus,
+  Layers,
+  Library,
   Loader2,
   Play,
   RefreshCcw,
   Save,
+  Search,
+  Settings,
+  ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
-  Upload,
+  SquareTerminal,
+  UploadCloud,
   Wand2,
+  Zap,
 } from "lucide-react";
 import "./styles.css";
 
 const API = "";
+
+const phases = [
+  { id: "ingest", label: "Ingest", eyebrow: "Phase 1" },
+  { id: "seed", label: "Identity Seed", eyebrow: "Phase 2" },
+  { id: "expansion", label: "Synthetic Expansion", eyebrow: "Phase 3" },
+  { id: "qc", label: "Identity QC", eyebrow: "Phase 4" },
+  { id: "library", label: "Dataset Library", eyebrow: "Phase 5" },
+  { id: "factory", label: "Model Factory", eyebrow: "Phase 6" },
+];
 
 const defaultGenerationCommand = `# The backend sets REF_DIR, CANDIDATE_DIR, CASE_DIR, COUNT, and TRIGGER.
 python - <<'PYGEN'
@@ -57,36 +77,221 @@ function cx(...parts) {
   return parts.filter(Boolean).join(" ");
 }
 
-function Metric({ icon: Icon, label, value }) {
+function fmt(value, fallback = "n/a") {
+  return value === undefined || value === null || value === "" ? fallback : value;
+}
+
+function clampPercent(value) {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, Math.min(100, parsed));
+}
+
+function scoreToPercent(score) {
+  const parsed = Number(score);
+  if (!Number.isFinite(parsed)) return 0;
+  return clampPercent(parsed <= 1 ? parsed * 100 : parsed);
+}
+
+function normalizeBool(value) {
+  return value === true || value === "True" || value === "true" || value === 1 || value === "1";
+}
+
+function AppShell({
+  activePhase,
+  setActivePhase,
+  cases,
+  activeCase,
+  setActiveCase,
+  caseLabel,
+  setCaseLabel,
+  onNewCase,
+  workRoot,
+  busy,
+  status,
+  children,
+}) {
   return (
-    <div className="metric">
-      <Icon size={18} />
-      <span>{label}</span>
-      <strong>{value || "n/a"}</strong>
+    <div className="app-shell">
+      <header className="topbar">
+        <button className="brand-mark" onClick={() => setActivePhase("ingest")}>
+          Chimera
+        </button>
+        <PhaseNav activePhase={activePhase} setActivePhase={setActivePhase} />
+        <div className="top-actions">
+          <div className="search-pill">
+            <Search size={16} />
+            <span>Search models, configs...</span>
+          </div>
+          <button className="icon-button" aria-label="Notifications">
+            <Bell size={20} />
+          </button>
+          <button className="icon-button" aria-label="Settings">
+            <Settings size={20} />
+          </button>
+        </div>
+      </header>
+
+      <aside className="side-rail">
+        <div className="session-card">
+          <span className="session-icon">
+            <Cpu size={20} />
+          </span>
+          <div>
+            <strong>Project Chimera</strong>
+            <span>Active Session</span>
+          </div>
+        </div>
+        <button className="primary rail-action" onClick={onNewCase} disabled={busy}>
+          <ImagePlus size={16} /> New Training Run
+        </button>
+        <nav className="rail-nav">
+          <a className="rail-link" href="#hardware">
+            <Cpu size={18} /> Hardware
+          </a>
+          <a className="rail-link active" href="#datasets">
+            <Database size={18} /> Datasets
+          </a>
+          <a className="rail-link" href="#logs">
+            <FileText size={18} /> Logs
+          </a>
+          <a className="rail-link" href="#terminal">
+            <SquareTerminal size={18} /> Terminal
+          </a>
+        </nav>
+      </aside>
+
+      <main className="workspace">
+        <div className="case-bar">
+          <div>
+            <span className="micro-label">Workspace</span>
+            <strong>{workRoot || "Preparing workspace"}</strong>
+          </div>
+          <div className="case-controls">
+            <label>
+              Case
+              <select
+                value={activeCase}
+                onChange={(event) => setActiveCase(event.target.value)}
+              >
+                {cases.map((name) => <option key={name}>{name}</option>)}
+              </select>
+            </label>
+            <label>
+              New label
+              <input value={caseLabel} onChange={(event) => setCaseLabel(event.target.value)} />
+            </label>
+            <button onClick={onNewCase} disabled={busy}>
+              <ImagePlus size={16} /> New Case
+            </button>
+          </div>
+        </div>
+
+        {status && (
+          <div className="status-banner">
+            {busy && <Loader2 className="spin" size={16} />}
+            <span>{status}</span>
+          </div>
+        )}
+
+        {children}
+      </main>
     </div>
   );
 }
 
-function ImageGrid({ title, items, selected = false, empty = "No images" }) {
+function PhaseNav({ activePhase, setActivePhase }) {
   return (
-    <section className="panel media-panel">
-      <div className="panel-title">
-        <span>{title}</span>
-        <span className="count">{items.length}</span>
+    <nav className="phase-nav" aria-label="Project phase navigation">
+      {phases.map((phase) => (
+        <button
+          key={phase.id}
+          className={activePhase === phase.id ? "active" : ""}
+          onClick={() => setActivePhase(phase.id)}
+        >
+          {phase.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function PageHeader({ eyebrow, title, description, actions }) {
+  return (
+    <header className="phase-header">
+      <div>
+        <span className="phase-chip">{eyebrow}</span>
+        <h1>{title}</h1>
+        <p>{description}</p>
       </div>
-      <div className="image-grid">
-        {items.map((item) => (
-          <img
-            key={item.path}
-            src={`${item.url}&t=${Date.now()}`}
-            alt={item.name}
-            className={cx("tile", (selected || item.selected) && "selected")}
-            loading="lazy"
-          />
-        ))}
-        {items.length === 0 && <div className="empty">{empty}</div>}
-      </div>
+      {actions && <div className="phase-actions">{actions}</div>}
+    </header>
+  );
+}
+
+function SurfaceCard({ title, icon: Icon, children, className, action }) {
+  return (
+    <section className={cx("surface-card", className)}>
+      {(title || Icon || action) && (
+        <div className="card-heading">
+          <div>
+            {Icon && <Icon size={20} />}
+            {title && <h2>{title}</h2>}
+          </div>
+          {action}
+        </div>
+      )}
+      {children}
     </section>
+  );
+}
+
+function StatPill({ label, value, tone = "neutral" }) {
+  return (
+    <div className={cx("stat-pill", tone)}>
+      <span>{label}</span>
+      <strong>{fmt(value, "0")}</strong>
+    </div>
+  );
+}
+
+function MetricTile({ icon: Icon, label, value }) {
+  return (
+    <div className="metric-tile">
+      <Icon size={18} />
+      <span>{label}</span>
+      <strong>{fmt(value)}</strong>
+    </div>
+  );
+}
+
+function ImageGallery({ title, items = [], qcByPath, selected = false, empty = "No images yet", compact = false }) {
+  return (
+    <SurfaceCard title={title} icon={Library} className={compact ? "compact-card" : ""}>
+      <div className={cx("gallery-grid", compact && "compact")}>
+        {items.map((item) => {
+          const qc = qcByPath?.get(item.path);
+          const passed = normalizeBool(qc?.passed);
+          const score = qc?.identity_score;
+          const hasScore = score !== undefined && score !== null && score !== "";
+          return (
+            <article key={item.path} className={cx("image-card", (selected || item.selected || passed) && "accepted", hasScore && !passed && "rejected")}>
+              <img src={`${item.url}&t=${Date.now()}`} alt={item.name} loading="lazy" />
+              <div className="image-card-meta">
+                <span>{item.name}</span>
+                {hasScore && (
+                  <b className={passed ? "score-pass" : "score-fail"}>
+                    {Number(score).toFixed(2)}
+                  </b>
+                )}
+              </div>
+              {hasScore && <div className="mini-bar"><i style={{ width: `${scoreToPercent(score)}%` }} /></div>}
+            </article>
+          );
+        })}
+        {items.length === 0 && <div className="empty-state">{empty}</div>}
+      </div>
+    </SurfaceCard>
   );
 }
 
@@ -117,44 +322,31 @@ function PromptCards({ promptsText, dashboard, steps, sampleEvery }) {
   );
 }
 
-function TrainingDashboard({ state, dashboard, samplePrompts, training, onPrepare, onStart, onRefresh, busy }) {
+function TrainingOverview({ dashboard, training, samplePrompts, configPath, onPrepare, onStart, onRefresh, busy }) {
   const current = dashboard?.current_step;
   const total = dashboard?.total_steps || training.steps;
-  const percent = dashboard?.percent || 0;
+  const percent = clampPercent(dashboard?.percent || 0);
   const stats = dashboard?.stats || {};
   const trainingState = dashboard?.training_state || {};
   const stepText = current == null ? "waiting for ai-toolkit step report" : `${current}/${total} steps`;
 
   return (
-    <section className="dashboard">
-      <div className="progress-block">
-        <div className="progress-labels">
-          <strong>steps</strong>
+    <SurfaceCard title="Training Progress" icon={Activity} className="training-card">
+      <div className="progress-summary">
+        <div>
           <span>{stepText}</span>
-          <span className={dashboard?.running ? "live" : "idle"}>{dashboard?.running ? "RUNNING" : "IDLE"}</span>
-          <span>PID {trainingState.pid || "n/a"}</span>
+          <strong>{percent}%</strong>
         </div>
-        <div className="progress-track">
-          <div style={{ width: `${percent}%` }} />
-        </div>
-        <code className="step-line">{trainingState.last_step_line || "No step line reported yet"}</code>
+        <span className={dashboard?.running ? "state-chip live" : "state-chip"}>{dashboard?.running ? "Running" : "Idle"}</span>
       </div>
+      <div className="progress-track"><i style={{ width: `${percent}%` }} /></div>
+      <code className="step-line">{trainingState.last_step_line || "No step line reported yet"}</code>
 
-      <div className="dashboard-main">
-        <div className="sample-preview">
-          {dashboard?.latest_sample ? (
-            <img src={`${dashboard.latest_sample}&t=${Date.now()}`} alt="Latest training sample" />
-          ) : (
-            <span>Character front face portrait sample</span>
-          )}
-        </div>
-        <aside className="stats-panel">
-          <Metric icon={Cpu} label="CPU" value={stats.pid_cpu} />
-          <Metric icon={Database} label="RAM" value={stats.pid_rss} />
-          <Metric icon={Activity} label="GPU" value={stats.gpu} />
-          <Metric icon={Gauge} label="VRAM" value={stats.vram_used} />
-          <Metric icon={Sparkles} label="POWER" value={`${stats.power || "n/a"} / ${stats.temp || "n/a"}`} />
-        </aside>
+      <div className="telemetry-grid">
+        <MetricTile icon={Cpu} label="CPU" value={stats.pid_cpu} />
+        <MetricTile icon={Database} label="RAM" value={stats.pid_rss} />
+        <MetricTile icon={Activity} label="GPU" value={stats.gpu} />
+        <MetricTile icon={Gauge} label="VRAM" value={stats.vram_used} />
       </div>
 
       <div className="artifact-strip">
@@ -164,20 +356,328 @@ function TrainingDashboard({ state, dashboard, samplePrompts, training, onPrepar
         <span>{dashboard?.artifacts?.checkpoint_files?.length || 0} checkpoint files</span>
       </div>
 
+      <div className="sample-preview-card">
+        {dashboard?.latest_sample ? (
+          <img src={`${dashboard.latest_sample}&t=${Date.now()}`} alt="Latest training sample" />
+        ) : (
+          <div>
+            <Sparkles size={24} />
+            <span>Latest sample will appear here</span>
+          </div>
+        )}
+      </div>
+
       <PromptCards promptsText={samplePrompts} dashboard={dashboard} steps={training.steps} sampleEvery={training.sample_every} />
 
       <div className="action-row">
         <button onClick={onPrepare} disabled={busy}>
           <Save size={16} /> Caption + Config
         </button>
-        <button onClick={onStart} disabled={busy || !state?.configPath} className="primary">
+        <button onClick={onStart} disabled={busy || !configPath} className="primary">
           <Play size={16} /> Start Training
         </button>
         <button onClick={onRefresh} disabled={busy}>
           <RefreshCcw size={16} /> Refresh
         </button>
       </div>
-    </section>
+    </SurfaceCard>
+  );
+}
+
+function IngestPhase({ state, files, setFiles, consent, setConsent, busy, onSaveReferences, caseLabel, setCaseLabel }) {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Phase 1: Ingest"
+        title="Provide Primary Subjects"
+        description="Upload 1 to 3 clear reference images. These become the source anchors for identity scoring and synthetic expansion."
+      />
+      <section className="ingest-layout">
+        <SurfaceCard className="upload-hero">
+          <label className="drop-zone">
+            <input type="file" multiple accept="image/*" onChange={(event) => setFiles([...event.target.files])} />
+            <span className="upload-orb"><UploadCloud size={36} /></span>
+            <strong>Drag and drop photos here</strong>
+            <small>or click to browse local files</small>
+            <em>JPG</em><em>PNG</em><em>WEBP</em>
+          </label>
+          <div className="upload-footer">
+            <label className="check-line">
+              <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
+              I have consent and rights to train this identity
+            </label>
+            <button className="primary" disabled={busy || !files.length || !consent} onClick={onSaveReferences}>
+              <UploadCloud size={16} /> Save References
+            </button>
+          </div>
+        </SurfaceCard>
+
+        <div className="side-stack">
+          <SurfaceCard title="Quality Requirements" icon={ShieldCheck}>
+            <ul className="quality-list">
+              <li><CheckCircle2 size={16} /> Clear face, no heavy occlusion</li>
+              <li><CheckCircle2 size={16} /> One primary subject per image</li>
+              <li><CheckCircle2 size={16} /> Mix of angles if uploading more than one</li>
+              <li><CheckCircle2 size={16} /> Original refs stay immutable for QC</li>
+            </ul>
+          </SurfaceCard>
+          <SurfaceCard title="Case Setup" icon={Database}>
+            <label>
+              Case label
+              <input value={caseLabel} onChange={(event) => setCaseLabel(event.target.value)} />
+            </label>
+            <div className="stat-row">
+              <StatPill label="Refs" value={state?.refs?.length || 0} />
+              <StatPill label="Candidates" value={state?.candidates?.length || 0} />
+            </div>
+          </SurfaceCard>
+        </div>
+      </section>
+      <ImageGallery title="Reference Anchors" items={state?.refs || []} empty="Saved references will appear here" />
+    </>
+  );
+}
+
+function SeedPhase({ state, dashboard, training, setTraining, samplePrompts, setSamplePrompts, configPath, busy, onPrepare, onStart, onRefresh }) {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Phase 2: Identity Seed"
+        title="Identity Seed LoRA (Z-Image Turbo)"
+        description="Configure the fast bootstrap identity run. This screen uses the current ai-toolkit actions and does not claim a dedicated Z-Image adapter job yet."
+        actions={<span className="state-chip">{configPath ? "Config ready" : "Config pending"}</span>}
+      />
+      <section className="bento two-col">
+        <TrainingOverview
+          dashboard={dashboard}
+          training={training}
+          samplePrompts={samplePrompts}
+          configPath={configPath}
+          busy={busy}
+          onPrepare={onPrepare}
+          onStart={onStart}
+          onRefresh={onRefresh}
+        />
+        <div className="side-stack">
+          <SurfaceCard title="Seed Parameters" icon={SlidersHorizontal}>
+            <div className="grid-form">
+              <label>Trigger <input value={training.trigger} onChange={(event) => setTraining({ ...training, trigger: event.target.value })} /></label>
+              <label>Base model <input value={training.model_name} onChange={(event) => setTraining({ ...training, model_name: event.target.value })} /></label>
+              <label>Rank <input type="number" value={training.rank} onChange={(event) => setTraining({ ...training, rank: Number(event.target.value) })} /></label>
+              <label>Steps <input type="number" value={training.steps} onChange={(event) => setTraining({ ...training, steps: Number(event.target.value) })} /></label>
+              <label>Learning rate <input value={training.lr} onChange={(event) => setTraining({ ...training, lr: event.target.value })} /></label>
+              <label>Sample every <input type="number" value={training.sample_every} onChange={(event) => setTraining({ ...training, sample_every: Number(event.target.value) })} /></label>
+              <label>Checkpoint every <input type="number" value={training.save_every} onChange={(event) => setTraining({ ...training, save_every: Number(event.target.value) })} /></label>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Sample Prompts" icon={Sparkles}>
+            <textarea value={samplePrompts} onChange={(event) => setSamplePrompts(event.target.value)} rows={9} />
+          </SurfaceCard>
+          <SurfaceCard title="Seed Inputs" icon={ImagePlus}>
+            <div className="stat-row">
+              <StatPill label="Refs" value={state?.refs?.length || 0} />
+              <StatPill label="Curated" value={state?.train?.length || 0} />
+            </div>
+          </SurfaceCard>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function ExpansionPhase({ state, count, setCount, importFolder, setImportFolder, generationCommand, setGenerationCommand, busy, onSmoke, onImport, onStartCommand, dashboard }) {
+  const stats = dashboard?.stats || {};
+  return (
+    <>
+      <PageHeader
+        eyebrow="Phase 3: Synthetic Expansion"
+        title="Generate Candidate Pool"
+        description="Create or import a large raw candidate set. The target count is a generation pool size, not the final dataset size."
+      />
+      <section className="bento two-col">
+        <div className="main-stack">
+          <SurfaceCard title="Expansion Controls" icon={Wand2}>
+            <div className="control-grid">
+              <label>Target candidates <input type="number" value={count} onChange={(event) => setCount(Number(event.target.value))} /></label>
+              <button disabled={busy} onClick={onSmoke}><Sparkles size={16} /> Smoke Test</button>
+              <label className="wide">Import folder <input value={importFolder} onChange={(event) => setImportFolder(event.target.value)} /></label>
+              <button disabled={busy} onClick={onImport}><FolderInput size={16} /> Import Images</button>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Generation Command" icon={SquareTerminal}>
+            <textarea value={generationCommand} onChange={(event) => setGenerationCommand(event.target.value)} rows={12} />
+            <div className="action-row">
+              <button className="primary" disabled={busy} onClick={onStartCommand}><Play size={16} /> Start Command</button>
+            </div>
+          </SurfaceCard>
+          <ImageGallery title="Synthetic Candidates" items={state?.candidates || []} empty="Generated or imported candidates will appear here" />
+        </div>
+        <div className="side-stack">
+          <SurfaceCard title="Expansion Summary" icon={Database}>
+            <div className="stat-row vertical">
+              <StatPill label="Candidates" value={state?.candidates?.length || 0} />
+              <StatPill label="Accepted" value={state?.candidates?.filter((item) => item.selected).length || 0} tone="good" />
+              <StatPill label="Target" value={count || 0} />
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Node Telemetry" icon={Activity}>
+            <div className="telemetry-grid single">
+              <MetricTile icon={Activity} label="GPU" value={stats.gpu} />
+              <MetricTile icon={Gauge} label="VRAM" value={stats.vram_used} />
+              <MetricTile icon={Zap} label="Power" value={stats.power} />
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Generation Log" icon={FileText}>
+            <pre>{state?.logs?.generate || "No generation log yet"}</pre>
+          </SurfaceCard>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function QcPhase({ state, qc, setQc, qcSummary, qcByPath, busy, onScoreSelect, dashboard }) {
+  const stats = dashboard?.stats || {};
+  return (
+    <>
+      <PageHeader
+        eyebrow="Phase 4: Identity QC"
+        title="Identity Auditing"
+        description="Review synthetic expansions against source anchors using real QC scores from the current backend."
+        actions={<button disabled={busy} onClick={onScoreSelect}><SlidersHorizontal size={16} /> Score + Select</button>}
+      />
+      <section className="qc-layout">
+        <div className="main-stack">
+          <ImageGallery title="Audit Grid" items={state?.candidates || []} qcByPath={qcByPath} empty="Run QC after candidates are available" />
+        </div>
+        <div className="side-stack">
+          <SurfaceCard title="QC Summary" icon={ShieldCheck}>
+            <div className="summary-list">
+              <span>Total Evaluated <b>{qcSummary.total}</b></span>
+              <span><i className="dot good" /> Passed <b>{qcSummary.passed}</b></span>
+              <span><i className="dot bad" /> Failed <b>{qcSummary.failed}</b></span>
+              <span><i className="dot pending" /> Pending Review <b>{qcSummary.pending}</b></span>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="ArcFace Similarity" icon={Gauge}>
+            <label>
+              Threshold <strong>{qc.identity_threshold}</strong>
+              <input type="range" min="0" max="1" step="0.01" value={qc.identity_threshold} onChange={(event) => setQc({ ...qc, identity_threshold: Number(event.target.value) })} />
+            </label>
+            <label>Min face <input type="number" step="0.001" value={qc.min_face_area} onChange={(event) => setQc({ ...qc, min_face_area: Number(event.target.value) })} /></label>
+            <label>Keep <input type="number" value={qc.top_n} onChange={(event) => setQc({ ...qc, top_n: Number(event.target.value) })} /></label>
+            <button className="primary full" disabled={busy} onClick={onScoreSelect}><Check size={16} /> Finalize Dataset</button>
+          </SurfaceCard>
+          <SurfaceCard title="Node Telemetry" icon={Cpu}>
+            <div className="telemetry-grid single">
+              <MetricTile icon={Activity} label="GPU" value={stats.gpu} />
+              <MetricTile icon={Gauge} label="VRAM" value={stats.vram_used} />
+            </div>
+          </SurfaceCard>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function LibraryPhase({ state, training, setTraining, samplePrompts, setSamplePrompts, busy, onPrepare }) {
+  return (
+    <>
+      <PageHeader
+        eyebrow="Phase 5: Dataset Library"
+        title="Curated Character Dataset"
+        description="The accepted identity set becomes the reusable source for downstream LoRA training."
+        actions={<button className="primary" disabled={busy} onClick={onPrepare}><Save size={16} /> Caption + Config</button>}
+      />
+      <section className="bento two-col">
+        <div className="main-stack">
+          <ImageGallery title="Curated Training Set" items={state?.train || []} empty="Accepted training images will appear after QC selection" />
+        </div>
+        <div className="side-stack">
+          <SurfaceCard title="Dataset Stats" icon={Database}>
+            <div className="stat-row vertical">
+              <StatPill label="Reference anchors" value={state?.refs?.length || 0} />
+              <StatPill label="Candidate pool" value={state?.candidates?.length || 0} />
+              <StatPill label="Curated images" value={state?.train?.length || 0} tone="good" />
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Caption Template" icon={FileText}>
+            <label>Trigger <input value={training.trigger} onChange={(event) => setTraining({ ...training, trigger: event.target.value })} /></label>
+            <label>Caption suffix <input value={training.base_caption} onChange={(event) => setTraining({ ...training, base_caption: event.target.value })} /></label>
+          </SurfaceCard>
+          <SurfaceCard title="Validation Prompts" icon={Sparkles}>
+            <textarea value={samplePrompts} onChange={(event) => setSamplePrompts(event.target.value)} rows={8} />
+          </SurfaceCard>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function FactoryPhase({ state, dashboard, training, setTraining, configPath, samplePrompts, busy, onPrepare, onStart, onRefresh }) {
+  const architectures = [
+    { label: "FLUX", detail: "Current ai-toolkit config", active: true },
+    { label: "Z-Image", detail: "Preset pending" },
+    { label: "Wan", detail: "Preset pending" },
+    { label: "LTX", detail: "Preset pending" },
+  ];
+  return (
+    <>
+      <PageHeader
+        eyebrow="Phase 6: Model Factory"
+        title="Model Adapter Factory"
+        description="Configure multi-target adapter runs. Only the current ai-toolkit config is actionable in this frontend pass."
+      />
+      <section className="bento two-col">
+        <div className="main-stack">
+          <SurfaceCard title="Target Architecture" icon={Layers}>
+            <div className="architecture-grid">
+              {architectures.map((item) => (
+                <button key={item.label} className={item.active ? "architecture active" : "architecture"} disabled={!item.active}>
+                  <strong>{item.label}</strong>
+                  <span>{item.detail}</span>
+                  {item.active && <CheckCircle2 size={16} />}
+                </button>
+              ))}
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Adapter Parameters" icon={SlidersHorizontal}>
+            <div className="grid-form">
+              <label>Network Rank <input type="number" value={training.rank} onChange={(event) => setTraining({ ...training, rank: Number(event.target.value) })} /></label>
+              <label>Learning Rate <input value={training.lr} onChange={(event) => setTraining({ ...training, lr: event.target.value })} /></label>
+              <label>Steps <input type="number" value={training.steps} onChange={(event) => setTraining({ ...training, steps: Number(event.target.value) })} /></label>
+              <label>Base model <input value={training.model_name} onChange={(event) => setTraining({ ...training, model_name: event.target.value })} /></label>
+            </div>
+            <div className="action-row">
+              <button onClick={onPrepare} disabled={busy}><Save size={16} /> Build Config</button>
+              <button className="primary" onClick={onStart} disabled={busy || !configPath}><Play size={16} /> Start Current Target</button>
+            </div>
+          </SurfaceCard>
+          <TrainingOverview
+            dashboard={dashboard}
+            training={training}
+            samplePrompts={samplePrompts}
+            configPath={configPath}
+            busy={busy}
+            onPrepare={onPrepare}
+            onStart={onStart}
+            onRefresh={onRefresh}
+          />
+        </div>
+        <div className="side-stack">
+          <SurfaceCard title="Telemetry" icon={Activity}>
+            <div className="summary-list">
+              <span>Run state <b>{dashboard?.running ? "Running" : "Idle"}</b></span>
+              <span>Current step <b>{fmt(dashboard?.current_step, "0")}</b></span>
+              <span>Curated images <b>{state?.train?.length || 0}</b></span>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Training Log" icon={FileText}>
+            <pre>{state?.logs?.train || "No training log yet"}</pre>
+          </SurfaceCard>
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -190,7 +690,7 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState([]);
   const [consent, setConsent] = useState(false);
-  const [count, setCount] = useState(200);
+  const [count, setCount] = useState(5000);
   const [importFolder, setImportFolder] = useState("/content/drive/MyDrive/GenAI/ComfyUI/output");
   const [generationCommand, setGenerationCommand] = useState(defaultGenerationCommand);
   const [qc, setQc] = useState({ identity_threshold: 0.32, min_face_area: 0.01, top_n: 100 });
@@ -206,10 +706,29 @@ function App() {
   });
   const [samplePrompts, setSamplePrompts] = useState(defaultSamplePrompts);
   const [configPath, setConfigPath] = useState("");
-  const [view, setView] = useState("pipeline");
+  const [activePhase, setActivePhase] = useState("ingest");
   const pollRef = useRef(null);
 
   const dashboard = state?.dashboard;
+  const qcByPath = useMemo(() => {
+    const map = new Map();
+    (state?.qc || []).forEach((row) => {
+      if (row.file) map.set(row.file, row);
+    });
+    return map;
+  }, [state?.qc]);
+  const qcSummary = useMemo(() => {
+    const rows = state?.qc || [];
+    const passed = rows.filter((row) => normalizeBool(row.passed)).length;
+    const failed = rows.length - passed;
+    const pending = Math.max((state?.candidates?.length || 0) - rows.length, 0);
+    return { total: rows.length, passed, failed, pending };
+  }, [state]);
+
+  function changePhase(nextPhase) {
+    setActivePhase(nextPhase);
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  }
 
   async function loadCases() {
     const payload = await request("/api/cases");
@@ -250,155 +769,138 @@ function App() {
 
   useEffect(() => {
     if (!activeCase) return;
+    setConfigPath("");
+    loadState(activeCase).catch((error) => setStatus(error.message));
+  }, [activeCase]);
+
+  useEffect(() => {
+    if (!activeCase) return;
     clearInterval(pollRef.current);
     pollRef.current = setInterval(() => {
       loadState(activeCase).catch(() => {});
     }, 5000);
     return () => clearInterval(pollRef.current);
-  }, [activeCase, qc.top_n, configPath]);
+  }, [activeCase, qc.top_n]);
 
-  const selectedCount = useMemo(() => state?.candidates?.filter((item) => item.selected).length || 0, [state]);
+  const actions = {
+    newCase: () => runAction(async () => {
+      const payload = await request("/api/cases", { method: "POST", body: JSON.stringify({ label: caseLabel }) });
+      setCases(payload.cases);
+      setActiveCase(payload.case);
+      return payload;
+    }),
+    saveReferences: () => runAction(async () => {
+      const data = new FormData();
+      data.append("consent", String(consent));
+      files.forEach((file) => data.append("files", file));
+      return request(`/api/cases/${encodeURIComponent(activeCase)}/references`, { method: "POST", body: data });
+    }),
+    smoke: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/smoke`, { method: "POST", body: JSON.stringify({ count }) })),
+    importImages: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/import`, { method: "POST", body: JSON.stringify({ source_folder: importFolder, copy_limit: count }) })),
+    startCommand: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/generation/start`, {
+      method: "POST",
+      body: JSON.stringify({ command: generationCommand, trigger: training.trigger, count }),
+    })),
+    scoreSelect: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/qc/score-select`, { method: "POST", body: JSON.stringify(qc) })),
+    prepare: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/training/prepare`, {
+      method: "POST",
+      body: JSON.stringify({ ...training, sample_prompts: samplePrompts }),
+    })),
+    startTraining: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/training/start`, {
+      method: "POST",
+      body: JSON.stringify({ config_path: configPath, trigger: training.trigger, steps: training.steps, sample_prompts: samplePrompts, sample_every: training.sample_every, save_every: training.save_every }),
+    })),
+    refresh: () => loadState(),
+  };
+
+  const phaseProps = { state, dashboard, busy, training, setTraining, samplePrompts, setSamplePrompts, configPath };
+  const phase = {
+    ingest: (
+      <IngestPhase
+        state={state}
+        files={files}
+        setFiles={setFiles}
+        consent={consent}
+        setConsent={setConsent}
+        busy={busy}
+        onSaveReferences={actions.saveReferences}
+        caseLabel={caseLabel}
+        setCaseLabel={setCaseLabel}
+      />
+    ),
+    seed: (
+      <SeedPhase
+        {...phaseProps}
+        onPrepare={actions.prepare}
+        onStart={actions.startTraining}
+        onRefresh={actions.refresh}
+      />
+    ),
+    expansion: (
+      <ExpansionPhase
+        state={state}
+        count={count}
+        setCount={setCount}
+        importFolder={importFolder}
+        setImportFolder={setImportFolder}
+        generationCommand={generationCommand}
+        setGenerationCommand={setGenerationCommand}
+        busy={busy}
+        onSmoke={actions.smoke}
+        onImport={actions.importImages}
+        onStartCommand={actions.startCommand}
+        dashboard={dashboard}
+      />
+    ),
+    qc: (
+      <QcPhase
+        state={state}
+        qc={qc}
+        setQc={setQc}
+        qcSummary={qcSummary}
+        qcByPath={qcByPath}
+        busy={busy}
+        onScoreSelect={actions.scoreSelect}
+        dashboard={dashboard}
+      />
+    ),
+    library: (
+      <LibraryPhase
+        state={state}
+        training={training}
+        setTraining={setTraining}
+        samplePrompts={samplePrompts}
+        setSamplePrompts={setSamplePrompts}
+        busy={busy}
+        onPrepare={actions.prepare}
+      />
+    ),
+    factory: (
+      <FactoryPhase
+        {...phaseProps}
+        onPrepare={actions.prepare}
+        onStart={actions.startTraining}
+        onRefresh={actions.refresh}
+      />
+    ),
+  }[activePhase];
 
   return (
-    <main>
-      <header className="app-header">
-        <div>
-          <h1>Project Chimera</h1>
-          <p>{state?.work_root || "Preparing workspace"}</p>
-        </div>
-        <div className="header-actions">
-          <select value={activeCase} onChange={(event) => { setActiveCase(event.target.value); setConfigPath(""); loadState(event.target.value); }}>
-            {cases.map((name) => <option key={name}>{name}</option>)}
-          </select>
-          <input value={caseLabel} onChange={(event) => setCaseLabel(event.target.value)} />
-          <button onClick={() => runAction(async () => {
-            const payload = await request("/api/cases", { method: "POST", body: JSON.stringify({ label: caseLabel }) });
-            setCases(payload.cases);
-            setActiveCase(payload.case);
-            return payload;
-          })}>
-            <ImagePlus size={16} /> New Case
-          </button>
-        </div>
-      </header>
-
-      <nav className="tabs">
-        {["pipeline", "advanced", "logs"].map((name) => (
-          <button key={name} className={view === name ? "active" : ""} onClick={() => setView(name)}>{name}</button>
-        ))}
-      </nav>
-
-      {status && <div className="status">{busy && <Loader2 className="spin" size={16} />} {status}</div>}
-
-      {view === "pipeline" && (
-        <>
-          <section className="pipeline">
-            <div className="panel step-panel">
-              <div className="panel-title"><span>1. Upload</span><Upload size={18} /></div>
-              <label className="check-line">
-                <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-                I have consent/rights
-              </label>
-              <input type="file" multiple accept="image/*" onChange={(event) => setFiles([...event.target.files])} />
-              <button className="primary" disabled={busy || !files.length || !consent} onClick={() => runAction(async () => {
-                const data = new FormData();
-                data.append("consent", String(consent));
-                files.forEach((file) => data.append("files", file));
-                return request(`/api/cases/${encodeURIComponent(activeCase)}/references`, { method: "POST", body: data });
-              })}>
-                <Upload size={16} /> Save References
-              </button>
-              <ImageGrid title="References" items={state?.refs || []} />
-            </div>
-
-            <div className="panel step-panel">
-              <div className="panel-title"><span>2. Generate</span><Wand2 size={18} /></div>
-              <label>Count <input type="number" value={count} onChange={(event) => setCount(Number(event.target.value))} /></label>
-              <button disabled={busy} onClick={() => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/smoke`, { method: "POST", body: JSON.stringify({ count }) }))}>
-                <Sparkles size={16} /> Smoke Test
-              </button>
-              <label>Import folder <input value={importFolder} onChange={(event) => setImportFolder(event.target.value)} /></label>
-              <button disabled={busy} onClick={() => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/import`, { method: "POST", body: JSON.stringify({ source_folder: importFolder, copy_limit: count }) }))}>
-                <FolderInput size={16} /> Import Images
-              </button>
-              <ImageGrid title="Synthetic Candidates" items={state?.candidates || []} />
-            </div>
-
-            <div className="panel step-panel">
-              <div className="panel-title"><span>3. QC Select</span><Check size={18} /></div>
-              <label>Identity <input type="number" step="0.01" value={qc.identity_threshold} onChange={(event) => setQc({ ...qc, identity_threshold: Number(event.target.value) })} /></label>
-              <label>Min face <input type="number" step="0.001" value={qc.min_face_area} onChange={(event) => setQc({ ...qc, min_face_area: Number(event.target.value) })} /></label>
-              <label>Keep <input type="number" value={qc.top_n} onChange={(event) => setQc({ ...qc, top_n: Number(event.target.value) })} /></label>
-              <button className="primary" disabled={busy} onClick={() => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/qc/score-select`, { method: "POST", body: JSON.stringify(qc) }))}>
-                <Check size={16} /> Score + Select
-              </button>
-              <ImageGrid title={`QC Highlights (${selectedCount})`} items={state?.candidates || []} />
-            </div>
-          </section>
-
-          <ImageGrid title="Curated Training Set" items={state?.train || []} />
-
-          <TrainingDashboard
-            state={{ configPath }}
-            dashboard={dashboard}
-            samplePrompts={samplePrompts}
-            training={training}
-            busy={busy}
-            onPrepare={() => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/training/prepare`, {
-              method: "POST",
-              body: JSON.stringify({ ...training, sample_prompts: samplePrompts }),
-            }))}
-            onStart={() => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/training/start`, {
-              method: "POST",
-              body: JSON.stringify({ config_path: configPath, trigger: training.trigger, steps: training.steps, sample_prompts: samplePrompts, sample_every: training.sample_every, save_every: training.save_every }),
-            }))}
-            onRefresh={() => loadState()}
-          />
-        </>
-      )}
-
-      {view === "advanced" && (
-        <section className="advanced">
-          <div className="panel">
-            <div className="panel-title"><span>Generation Command</span><Play size={18} /></div>
-            <textarea value={generationCommand} onChange={(event) => setGenerationCommand(event.target.value)} rows={12} />
-            <button disabled={busy} onClick={() => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/generation/start`, {
-              method: "POST",
-              body: JSON.stringify({ command: generationCommand, trigger: training.trigger, count }),
-            }))}>
-              <Play size={16} /> Start Command
-            </button>
-          </div>
-          <div className="panel">
-            <div className="panel-title"><span>Training Config</span><Save size={18} /></div>
-            <label>Trigger <input value={training.trigger} onChange={(event) => setTraining({ ...training, trigger: event.target.value })} /></label>
-            <label>Base model <input value={training.model_name} onChange={(event) => setTraining({ ...training, model_name: event.target.value })} /></label>
-            <label>Caption suffix <input value={training.base_caption} onChange={(event) => setTraining({ ...training, base_caption: event.target.value })} /></label>
-            <div className="grid-form">
-              <label>Rank <input type="number" value={training.rank} onChange={(event) => setTraining({ ...training, rank: Number(event.target.value) })} /></label>
-              <label>Steps <input type="number" value={training.steps} onChange={(event) => setTraining({ ...training, steps: Number(event.target.value) })} /></label>
-              <label>LR <input value={training.lr} onChange={(event) => setTraining({ ...training, lr: event.target.value })} /></label>
-              <label>Sample every <input type="number" value={training.sample_every} onChange={(event) => setTraining({ ...training, sample_every: Number(event.target.value) })} /></label>
-              <label>Checkpoint every <input type="number" value={training.save_every} onChange={(event) => setTraining({ ...training, save_every: Number(event.target.value) })} /></label>
-            </div>
-            <textarea value={samplePrompts} onChange={(event) => setSamplePrompts(event.target.value)} rows={8} />
-          </div>
-        </section>
-      )}
-
-      {view === "logs" && (
-        <section className="logs">
-          <div className="panel">
-            <div className="panel-title"><span>Generation Log</span></div>
-            <pre>{state?.logs?.generate || ""}</pre>
-          </div>
-          <div className="panel">
-            <div className="panel-title"><span>Training Log</span></div>
-            <pre>{state?.logs?.train || ""}</pre>
-          </div>
-        </section>
-      )}
-    </main>
+    <AppShell
+      activePhase={activePhase}
+      setActivePhase={changePhase}
+      cases={cases}
+      activeCase={activeCase}
+      setActiveCase={setActiveCase}
+      caseLabel={caseLabel}
+      setCaseLabel={setCaseLabel}
+      onNewCase={actions.newCase}
+      workRoot={state?.work_root}
+      busy={busy}
+      status={status}
+    >
+      {phase}
+    </AppShell>
   );
 }
 
