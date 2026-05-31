@@ -70,16 +70,24 @@ def caption_for_image(path, trigger, base_caption, metadata=None):
     return ", ".join(deduped)
 
 
-def caption_curated(case_name, trigger, base_caption):
+def caption_folder(case_name, folder_key, trigger, base_caption):
     case_name = ensure_case(case_name)
     paths = dirs(case_name)
-    imgs = image_paths(paths["train"])
+    imgs = image_paths(paths[folder_key])
     if not imgs:
-        return "No curated training images found. Run auto-select first."
+        return f"No images found in {paths[folder_key]}."
     for img in imgs:
         path = Path(img)
         path.with_suffix(".txt").write_text(caption_for_image(path, trigger, base_caption, read_train_metadata(path)) + "\n")
-    return f"Wrote {len(imgs)} caption files in {paths['train']}."
+    return f"Wrote {len(imgs)} caption files in {paths[folder_key]}."
+
+
+def caption_curated(case_name, trigger, base_caption):
+    return caption_folder(case_name, "train", trigger, base_caption)
+
+
+def caption_final(case_name, trigger, base_caption):
+    return caption_folder(case_name, "final", trigger, base_caption)
 
 
 def preview_captions(case_name):

@@ -251,8 +251,8 @@ The current React + FastAPI app already provides the foundation:
 
 - Upload 1-3 reference images.
 - Store cases under Google Drive.
-- Run the current seed pipeline: reference upload, Flux2-PuLID candidate generation, strict QC selection, captions, config creation, and training preflight.
-- Block the seed pipeline when runtime preflight detects missing Flux2-PuLID, ComfyUI, face-QC, work-root, or ai-toolkit setup.
+- Run the full staged pipeline from one upload action when preflight passes: reference upload, Flux2-PuLID seed generation, strict QC, seed captions, Z-Image identity LoRA command, Z-Image expansion command, very-strict final QC, and final captions.
+- Block the full pipeline when runtime preflight detects missing Flux2-PuLID, ComfyUI, face-QC, work-root, ai-toolkit, or Z-Image command setup.
 - Import or generate candidate images.
 - Run face identity QC at the fixed `0.92` identity threshold.
 - Highlight QC-selected candidates.

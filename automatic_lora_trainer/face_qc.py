@@ -199,7 +199,7 @@ def score_final_candidates(case_name, identity_threshold, min_face_area):
 
 
 def auto_select_final(case_name, top_n):
-    return auto_select_from_csv(case_name, "final_qc_scores.csv", "final", top_n)
+    return auto_select_from_csv(case_name, "final_qc_scores.csv", "final", top_n, read_candidate_metadata(case_name))
 
 
 def score_select_final_pipeline(case_name, identity_threshold, min_face_area, top_n):

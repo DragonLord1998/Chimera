@@ -478,13 +478,14 @@ function TrainingOverview({ dashboard, training, samplePrompts, configPath, onPr
   );
 }
 
-function IngestPhase({ state, preflight, files, setFiles, consent, setConsent, busy, onRunPipeline, onRefreshPreflight, caseLabel, setCaseLabel, count, setCount, qc, setQc, training, setTraining }) {
+function IngestPhase({ state, preflight, files, setFiles, consent, setConsent, busy, onRunPipeline, onRefreshPreflight, caseLabel, setCaseLabel, count, setCount, zimageCount, setZimageCount, qc, setQc, training, setTraining }) {
+  const fullReadiness = preflight ? { ...preflight, items: preflight.full_items || preflight.items || [] } : preflight;
   return (
     <>
       <PageHeader
         eyebrow="Phase 1: Ingest"
         title="Upload One Photo"
-        description="Review the run settings, upload one clear reference, then Chimera uses the configured Flux2-PuLID generator to build the seed dataset before strict QC."
+        description="Review the run settings, upload one clear reference, then Chimera runs the staged identity pipeline when all runtime checks pass."
       />
       <section className="ingest-layout">
         <div className="main-stack">
@@ -501,8 +502,8 @@ function IngestPhase({ state, preflight, files, setFiles, consent, setConsent, b
                 <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
                 I have consent and rights to train this identity
               </label>
-              <button className="primary" disabled={busy || !files.length || !consent || preflight?.ready !== true} onClick={onRunPipeline}>
-                <UploadCloud size={16} /> Run Seed Pipeline
+              <button className="primary" disabled={busy || !files.length || !consent || preflight?.full_ready !== true} onClick={onRunPipeline}>
+                <UploadCloud size={16} /> Run Full Pipeline
               </button>
             </div>
           </SurfaceCard>
@@ -542,15 +543,16 @@ function IngestPhase({ state, preflight, files, setFiles, consent, setConsent, b
             icon={ShieldCheck}
             action={<button className="ghost-button" type="button" onClick={onRefreshPreflight} disabled={busy}><RefreshCcw size={14} /> Check</button>}
           >
-            <div className={cx("readiness-banner", preflight?.ready ? "ready" : "blocked")}>
-              {preflight?.ready ? "Ready for one-click run" : "Setup required before one-click run"}
+            <div className={cx("readiness-banner", preflight?.full_ready ? "ready" : "blocked")}>
+              {preflight?.full_ready ? "Ready for full one-click run" : "Setup required before full one-click run"}
             </div>
-            <ReadinessList preflight={preflight} />
+            <ReadinessList preflight={fullReadiness} />
           </SurfaceCard>
           <SurfaceCard title="Run Settings" icon={SlidersHorizontal}>
             <div className="grid-form compact-form">
               <label className="wide">Generator <input value="Flux2-PuLID" readOnly /></label>
               <label>Candidate count <input type="number" min="1" value={count} onChange={(event) => setCount(Number(event.target.value))} /></label>
+              <label>Z-Image target <input type="number" min="1" value={zimageCount} onChange={(event) => setZimageCount(Number(event.target.value))} /></label>
               <label>Keep after QC <input type="number" min="1" value={qc.top_n} onChange={(event) => setQc({ ...qc, top_n: Number(event.target.value) })} /></label>
               <label>Trigger <input value={training.trigger} onChange={(event) => setTraining({ ...training, trigger: event.target.value })} /></label>
               <label>Rank <input type="number" min="1" value={training.rank} onChange={(event) => setTraining({ ...training, rank: Number(event.target.value) })} /></label>
@@ -1213,15 +1215,16 @@ function App() {
       data.append("consent", String(consent));
       files.forEach((file) => data.append("files", file));
       await request(`/api/cases/${encodeURIComponent(activeCase)}/references`, { method: "POST", body: data });
-      return request(`/api/cases/${encodeURIComponent(activeCase)}/pipeline/run`, {
+      return request(`/api/cases/${encodeURIComponent(activeCase)}/pipeline/full-run`, {
         method: "POST",
         body: JSON.stringify({
           ...training,
           count,
+          zimage_count: zimageCount,
+          final_top_n: qc.top_n,
           top_n: qc.top_n,
           min_face_area: qc.min_face_area,
           sample_prompts: samplePrompts,
-          start_training: false,
           generation_backend: "flux2_pulid",
           allow_smoke_fallback: false,
         }),
@@ -1278,6 +1281,8 @@ function App() {
         setCaseLabel={setCaseLabel}
         count={count}
         setCount={setCount}
+        zimageCount={zimageCount}
+        setZimageCount={setZimageCount}
         qc={qc}
         setQc={setQc}
         training={training}
