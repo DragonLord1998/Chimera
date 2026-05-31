@@ -25,6 +25,7 @@ def dirs(case_name):
         "refs": root / "refs",
         "candidates": root / "candidates",
         "identity_lora": root / "identity_lora",
+        "model_loras": root / "model_loras",
         "production_candidates": root / "production_candidates",
         "curated": root / "curated",
         "train": root / "curated" / "train",

@@ -7,13 +7,14 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .captioning import caption_curated, caption_final, preview_captions
 from .dashboard import expected_interval_steps, training_progress
 from .face_qc import FaceQcUnavailable, score_candidates, score_select_final_pipeline, score_select_pipeline
 from .generation import GenerationUnavailable, generate_candidates, import_candidates, smoke_generate, start_background
 from .media import latest_sample_image, selected_from_qc, training_artifact_steps
+from .model_loras import DEFAULT_MODEL_TARGETS, ModelLoraUnavailable, model_lora_artifacts, run_model_lora_generation
 from .paths import clean_slug, create_case, dirs, ensure_case, image_paths, list_cases
 from .preflight import runtime_preflight
 from .settings import AI_TOOLKIT_DIR, IMAGE_EXTS, WORK_ROOT
@@ -141,6 +142,18 @@ class FinalQcRequest(BaseModel):
     top_n: int = DEFAULT_PIPELINE_TOP_N
 
 
+class ModelLoraRequest(BaseModel):
+    trigger: str = DEFAULT_TRIGGER
+    model_name: str = DEFAULT_MODEL_NAME
+    rank: int = DEFAULT_RANK
+    steps: int = DEFAULT_STEPS
+    lr: str = DEFAULT_LR
+    sample_prompts: str = DEFAULT_SAMPLE_PROMPTS
+    sample_every: int = DEFAULT_SAMPLE_EVERY
+    save_every: int = DEFAULT_SAVE_EVERY
+    targets: list[str] = Field(default_factory=lambda: DEFAULT_MODEL_TARGETS.copy())
+
+
 def safe_case_name(case_name: str) -> str:
     return ensure_case(case_name)
 
@@ -190,6 +203,18 @@ def zimage_training_env(payload) -> dict[str, str]:
     }
 
 
+def model_training_env(payload) -> dict[str, str]:
+    return {
+        "MODEL_BASE_MODEL": payload.model_name,
+        "MODEL_LORA_RANK": str(payload.rank),
+        "MODEL_LORA_STEPS": str(payload.steps),
+        "MODEL_LORA_LR": str(payload.lr),
+        "MODEL_SAMPLE_PROMPTS": payload.sample_prompts,
+        "MODEL_SAMPLE_EVERY": str(payload.sample_every),
+        "MODEL_SAVE_EVERY": str(payload.save_every),
+    }
+
+
 def case_payload(case_name: str, top_n: int = 100):
     case_name = safe_case_name(case_name)
     paths = dirs(case_name)
@@ -214,12 +239,14 @@ def case_payload(case_name: str, top_n: int = 100):
         "train": image_records(paths["train"]),
         "final": image_records(paths["final"]),
         "identity_lora_artifacts": identity_lora_artifacts(case_name),
+        "model_lora_artifacts": model_lora_artifacts(case_name),
         "qc": qc_records,
         "logs": {
             "generate": read_log(case_name, "generate"),
             "train": read_log(case_name, "train"),
             "zimage_identity_lora": read_log(case_name, "zimage_identity_lora"),
             "zimage_expansion": read_log(case_name, "zimage_expansion"),
+            "model_loras": read_log(case_name, "model_loras"),
         },
         "dashboard": {
             "current_step": current,
@@ -401,6 +428,19 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {"status": status, "qc": dataframe_records(df), "selected": selected, "state": case_payload(case_name, payload.top_n)}
 
+    @app.post("/api/cases/{case_name}/model-loras/run")
+    def post_model_loras_run(case_name: str, payload: ModelLoraRequest):
+        try:
+            status, artifacts = run_model_lora_generation(
+                case_name,
+                payload.trigger,
+                payload.targets,
+                model_training_env(payload),
+            )
+        except ModelLoraUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        return {"status": status, "artifacts": artifacts, "state": case_payload(case_name)}
+
     @app.post("/api/cases/{case_name}/pipeline/full-run")
     def post_full_pipeline_run(case_name: str, payload: FullPipelineRunRequest):
         statuses = []
@@ -448,16 +488,27 @@ def create_app() -> FastAPI:
             )
             statuses.append(final_qc_status)
             statuses.append(caption_final(case_name, payload.trigger, payload.base_caption))
+
+            model_status, model_artifacts = run_model_lora_generation(
+                case_name,
+                payload.trigger,
+                DEFAULT_MODEL_TARGETS,
+                model_training_env(payload),
+            )
+            statuses.append(model_status)
         except GenerationUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except FaceQcUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ZImageUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ModelLoraUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
         return {
             "status": "\n".join(statuses),
             "identity_lora_artifacts": artifacts,
+            "model_lora_artifacts": model_artifacts,
             "fixed_identity_threshold": FIXED_IDENTITY_THRESHOLD,
             "state": case_payload(case_name, final_top_n),
         }

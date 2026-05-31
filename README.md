@@ -28,7 +28,7 @@ What is wired today:
 
 - Upload references through the FastAPI `/references` endpoint.
 - Run Flux2-PuLID generation through `FLUX2_PULID_COMMAND`; the command receives `REF_DIR`, `CANDIDATE_DIR`, `COUNT`, `TRIGGER`, and `PROMPT_MANIFEST`.
-- Check runtime readiness before starting the one-click seed pipeline.
+- Check runtime readiness before starting the one-click full pipeline.
 - Generate a small local candidate set with the built-in reference augmentation generator only through the explicit dev smoke path.
 - Score and select candidates with InsightFace/ArcFace identity QC fixed at `0.92`.
 - Preserve prompt-bucket metadata through QC into sidecar JSON.
@@ -37,6 +37,7 @@ What is wired today:
 - Run command-backed Z-Image identity LoRA training through `ZIMAGE_IDENTITY_TRAIN_COMMAND`; the command receives `TRAIN_DIR`, `IDENTITY_LORA_DIR`, `TRIGGER`, `ZIMAGE_BASE_MODEL`, `ZIMAGE_RANK`, `ZIMAGE_STEPS`, `ZIMAGE_LR`, sample settings, and case paths.
 - Run command-backed Z-Image expansion through `ZIMAGE_EXPANSION_COMMAND`; the command receives `ZIMAGE_PROMPT_MANIFEST`, `ZIMAGE_IDENTITY_LORA`, `PRODUCTION_CANDIDATE_DIR`, and case paths.
 - Run very-strict final QC over `production_candidates/` and copy accepted images into `curated/final/`.
+- Run command-backed final per-model LoRA generation through `MODEL_LORA_COMMAND`; the command receives `FINAL_TRAIN_DIR`, `MODEL_LORA_DIR`, `MODEL_TARGETS`, model settings, sample settings, and case paths.
 
 If `FLUX2_PULID_COMMAND` is missing, the production pipeline returns a setup error instead of silently using fake generation.
 
@@ -44,7 +45,7 @@ What is not wired yet:
 
 - A bundled Z-Image Turbo trainer implementation. Chimera exposes the command bridge, but Colab still needs the real command/tool installed.
 - A bundled Z-Image Turbo inference implementation. Chimera exposes the expansion bridge, but Colab still needs the real command/tool installed.
-- Final multi-model LoRA training jobs for FLUX, Z-Image Base, Wan, and LTX.
+- A bundled final multi-model LoRA trainer. Chimera exposes the command bridge for FLUX, Z-Image Base, Wan, and LTX targets.
 
 The Colab launcher now prepares the expected runtime:
 
@@ -251,8 +252,8 @@ The current React + FastAPI app already provides the foundation:
 
 - Upload 1-3 reference images.
 - Store cases under Google Drive.
-- Run the full staged pipeline from one upload action when preflight passes: reference upload, Flux2-PuLID seed generation, strict QC, seed captions, Z-Image identity LoRA command, Z-Image expansion command, very-strict final QC, and final captions.
-- Block the full pipeline when runtime preflight detects missing Flux2-PuLID, ComfyUI, face-QC, work-root, ai-toolkit, or Z-Image command setup.
+- Run the full staged pipeline from one upload action when preflight passes: reference upload, Flux2-PuLID seed generation, strict QC, seed captions, Z-Image identity LoRA command, Z-Image expansion command, very-strict final QC, final captions, and final model LoRA command.
+- Block the full pipeline when runtime preflight detects missing Flux2-PuLID, ComfyUI, face-QC, work-root, ai-toolkit, Z-Image command, or final model LoRA command setup.
 - Import or generate candidate images.
 - Run face identity QC at the fixed `0.92` identity threshold.
 - Highlight QC-selected candidates.
@@ -356,6 +357,7 @@ INSTALL_AI_TOOLKIT=0 bash /content/project-chimera/colab_lora_factory.sh
 FACE_MODEL=buffalo_l bash /content/project-chimera/colab_lora_factory.sh
 ZIMAGE_IDENTITY_TRAIN_COMMAND="..." bash /content/project-chimera/colab_lora_factory.sh
 ZIMAGE_EXPANSION_COMMAND="..." bash /content/project-chimera/colab_lora_factory.sh
+MODEL_LORA_COMMAND="..." bash /content/project-chimera/colab_lora_factory.sh
 ```
 
 Do not set `HOST=0.0.0.0`. The launcher will refuse it.
@@ -376,6 +378,7 @@ cases/
     refs/                 # uploaded original reference images
     candidates/           # generated or imported synthetic candidates
     identity_lora/        # Z-Image Turbo identity LoRA artifacts
+    model_loras/          # final FLUX/Z-Image/Wan/LTX LoRA artifacts
     production_candidates/# large Z-Image expansion output
     curated/
       train/              # accepted training images and captions
@@ -386,6 +389,7 @@ cases/
       train.log
       zimage_identity_lora.log
       zimage_expansion.log
+      model_loras.log
     output/               # ai-toolkit output, samples, checkpoints
     qc_scores.csv
     final_qc_scores.csv
@@ -407,6 +411,7 @@ automatic_lora_trainer/
   generation.py   # reference upload, imports, smoke generation, command runner
   flux2_pulid_runner.py # ComfyUI API bridge for Flux2-PuLID candidate generation
   zimage.py       # command bridge for Z-Image identity LoRA and expansion stages
+  model_loras.py  # command bridge for final per-model LoRA generation
   face_qc.py      # InsightFace/AuraFace identity scoring and dataset selection
   captioning.py   # training captions and caption preview
   training.py     # ai-toolkit config and tracked training process

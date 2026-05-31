@@ -4,7 +4,7 @@ from pathlib import Path
 
 import requests
 
-from .settings import AI_TOOLKIT_DIR, FLUX2_PULID_COMMAND, WORK_ROOT, ZIMAGE_EXPANSION_COMMAND, ZIMAGE_IDENTITY_TRAIN_COMMAND
+from .settings import AI_TOOLKIT_DIR, FLUX2_PULID_COMMAND, MODEL_LORA_COMMAND, WORK_ROOT, ZIMAGE_EXPANSION_COMMAND, ZIMAGE_IDENTITY_TRAIN_COMMAND
 
 
 def check_item(key, label, ok, detail, required=True):
@@ -107,6 +107,15 @@ def zimage_expansion_command_check():
     )
 
 
+def model_lora_command_check():
+    return check_item(
+        "model_lora_command",
+        "Final model LoRA command",
+        bool(MODEL_LORA_COMMAND.strip()),
+        MODEL_LORA_COMMAND.strip() or "MODEL_LORA_COMMAND is not set.",
+    )
+
+
 def runtime_preflight():
     items = [
         work_root_check(),
@@ -119,6 +128,7 @@ def runtime_preflight():
     full_items = items + [
         zimage_identity_command_check(),
         zimage_expansion_command_check(),
+        model_lora_command_check(),
     ]
     blocking = [item for item in items if item["required"] and not item["ok"]]
     full_blocking = [item for item in full_items if item["required"] and not item["ok"]]

@@ -53,6 +53,8 @@ env["HOST"] = "127.0.0.1"
 # Set these after installing the real Z-Image Turbo train/inference commands.
 # env["ZIMAGE_IDENTITY_TRAIN_COMMAND"] = "..."
 # env["ZIMAGE_EXPANSION_COMMAND"] = "..."
+# Set this after installing the real final per-model LoRA trainer command.
+# env["MODEL_LORA_COMMAND"] = "..."
 
 print(f"Launching: {script_path}")
 print("Watch the output below for the Colab proxy URL.")

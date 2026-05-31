@@ -65,6 +65,7 @@ def env_for_case(case_name, trigger="zphchar", count=200):
             "REF_DIR": str(paths["refs"]),
             "CANDIDATE_DIR": str(paths["candidates"]),
             "IDENTITY_LORA_DIR": str(paths["identity_lora"]),
+            "MODEL_LORA_DIR": str(paths["model_loras"]),
             "PRODUCTION_CANDIDATE_DIR": str(paths["production_candidates"]),
             "CURATED_DIR": str(paths["curated"]),
             "TRAIN_DIR": str(paths["train"]),

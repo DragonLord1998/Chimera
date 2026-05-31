@@ -865,26 +865,28 @@ function LibraryPhase({ state, training, setTraining, samplePrompts, setSamplePr
   );
 }
 
-function FactoryPhase({ state, dashboard, training, setTraining, configPath, samplePrompts, busy, onPrepare, onStart, onRefresh }) {
+function FactoryPhase({ state, dashboard, preflight, training, setTraining, samplePrompts, busy, onStart }) {
+  const modelReady = preflightItemOk(preflight, "model_lora_command");
   const architectures = [
-    { label: "FLUX", detail: "Current ai-toolkit config", active: true },
-    { label: "Z-Image", detail: "Not wired yet" },
-    { label: "Wan", detail: "Not wired yet" },
-    { label: "LTX", detail: "Not wired yet" },
+    { label: "FLUX", detail: modelReady ? "Command target" : "Needs MODEL_LORA_COMMAND", active: modelReady },
+    { label: "Z-Image Base", detail: modelReady ? "Command target" : "Needs MODEL_LORA_COMMAND", active: modelReady },
+    { label: "Wan", detail: modelReady ? "Command target" : "Needs MODEL_LORA_COMMAND", active: modelReady },
+    { label: "LTX", detail: modelReady ? "Command target" : "Needs MODEL_LORA_COMMAND", active: modelReady },
   ];
   return (
     <>
       <PageHeader
         eyebrow="Phase 7: Other Model LoRAs"
         title="LoRA Generation For Other Models"
-        description="After the very-strict final dataset exists, this stage trains model-specific LoRAs. Only the current selected ai-toolkit config is actionable in this frontend pass."
+        description="After the very-strict final dataset exists, this command-backed stage trains model-specific LoRAs for the configured targets."
+        actions={<button className="primary" onClick={onStart} disabled={busy || !modelReady || !(state?.final?.length)}><Play size={16} /> Run Model LoRAs</button>}
       />
       <section className="bento two-col">
         <div className="main-stack">
           <SurfaceCard title="Target Architecture" icon={Layers}>
             <div className="architecture-grid">
               {architectures.map((item) => (
-                <button key={item.label} className={item.active ? "architecture active" : "architecture"} disabled={!item.active}>
+                <button key={item.label} className={item.active ? "architecture active" : "architecture"} disabled>
                   <strong>{item.label}</strong>
                   <span>{item.detail}</span>
                   {item.active && <CheckCircle2 size={16} />}
@@ -897,23 +899,12 @@ function FactoryPhase({ state, dashboard, training, setTraining, configPath, sam
               <label>Network Rank <input type="number" value={training.rank} onChange={(event) => setTraining({ ...training, rank: Number(event.target.value) })} /></label>
               <label>Learning Rate <input value={training.lr} onChange={(event) => setTraining({ ...training, lr: event.target.value })} /></label>
               <label>Steps <input type="number" value={training.steps} onChange={(event) => setTraining({ ...training, steps: Number(event.target.value) })} /></label>
-              <label>Base model <input value={training.model_name} onChange={(event) => setTraining({ ...training, model_name: event.target.value })} /></label>
+              <label>Default base model <input value={training.model_name} onChange={(event) => setTraining({ ...training, model_name: event.target.value })} /></label>
             </div>
-            <div className="action-row">
-              <button onClick={onPrepare} disabled={busy}><Save size={16} /> Build Config</button>
-              <button className="primary" onClick={onStart} disabled={busy || !configPath}><Play size={16} /> Start Current Target</button>
+            <div className={cx("readiness-banner", modelReady ? "ready" : "blocked")}>
+              {modelReady ? "MODEL_LORA_COMMAND is ready" : "Set MODEL_LORA_COMMAND in Colab before running this stage."}
             </div>
           </SurfaceCard>
-          <TrainingOverview
-            dashboard={dashboard}
-            training={training}
-            samplePrompts={samplePrompts}
-            configPath={configPath}
-            busy={busy}
-            onPrepare={onPrepare}
-            onStart={onStart}
-            onRefresh={onRefresh}
-          />
         </div>
         <div className="side-stack">
           <SurfaceCard title="Telemetry" icon={Activity}>
@@ -921,10 +912,11 @@ function FactoryPhase({ state, dashboard, training, setTraining, configPath, sam
               <span>Run state <b>{dashboard?.running ? "Running" : "Idle"}</b></span>
               <span>Current step <b>{fmt(dashboard?.current_step, "0")}</b></span>
               <span>Final dataset images <b>{state?.final?.length || 0}</b></span>
+              <span>Model LoRA artifacts <b>{state?.model_lora_artifacts?.length || 0}</b></span>
             </div>
           </SurfaceCard>
           <SurfaceCard title="Training Log" icon={FileText}>
-            <pre>{state?.logs?.train || "No training log yet"}</pre>
+            <pre>{state?.logs?.model_loras || "No model LoRA log yet"}</pre>
           </SurfaceCard>
         </div>
       </section>
@@ -1017,6 +1009,7 @@ function UtilityPanel({ view, state, dashboard, qcSummary, configPath, training,
               <StatPill label="Curated train" value={state?.train?.length || 0} tone="good" />
               <StatPill label="Z-Image raw" value={state?.production_candidates?.length || 0} />
               <StatPill label="Final dataset" value={state?.final?.length || 0} tone="good" />
+              <StatPill label="Model LoRAs" value={state?.model_lora_artifacts?.length || 0} tone="good" />
             </div>
             <div className="action-row utility-actions">
               <button onClick={onOpenLibrary}><Library size={16} /> Open Dataset Library</button>
@@ -1048,7 +1041,7 @@ function UtilityPanel({ view, state, dashboard, qcSummary, configPath, training,
             <pre>{state?.logs?.train || "No training log yet"}</pre>
           </SurfaceCard>
           <SurfaceCard title="Z-Image Logs" icon={FileText}>
-            <pre>{[state?.logs?.zimage_identity_lora, state?.logs?.zimage_expansion].filter(Boolean).join("\n\n") || "No Z-Image logs yet"}</pre>
+            <pre>{[state?.logs?.zimage_identity_lora, state?.logs?.zimage_expansion, state?.logs?.model_loras].filter(Boolean).join("\n\n") || "No Z-Image or model LoRA logs yet"}</pre>
           </SurfaceCard>
         </section>
       )}
@@ -1257,6 +1250,10 @@ function App() {
       method: "POST",
       body: JSON.stringify({ min_face_area: qc.min_face_area, top_n: qc.top_n }),
     })),
+    runModelLoras: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/model-loras/run`, {
+      method: "POST",
+      body: JSON.stringify({ ...training, sample_prompts: samplePrompts, targets: ["flux", "zimage_base", "wan", "ltx"] }),
+    })),
     refresh: () => loadState(),
     refreshPreflight: () => runAction(async () => {
       const payload = await loadPreflight();
@@ -1359,10 +1356,14 @@ function App() {
     ),
     factory: (
       <FactoryPhase
-        {...phaseProps}
-        onPrepare={actions.prepare}
-        onStart={actions.startTraining}
-        onRefresh={actions.refresh}
+        state={state}
+        dashboard={dashboard}
+        preflight={preflight}
+        training={training}
+        setTraining={setTraining}
+        samplePrompts={samplePrompts}
+        busy={busy}
+        onStart={actions.runModelLoras}
       />
     ),
   }[activePhase];
