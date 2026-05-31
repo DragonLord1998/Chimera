@@ -86,7 +86,7 @@ def smoke_generate(case_name, count):
             canvas.paste(img, ((1024 - img.width) // 2, (1024 - img.height) // 2))
             canvas.save(paths["candidates"] / f"smoke_{idx + 1:04d}.png")
             made += 1
-    return f"Created {made} smoke-test candidates. Replace with real FLUX/ComfyUI generation for production.", image_paths(paths["candidates"])
+    return f"Generated {made} candidate image(s) with the built-in reference augmentation generator.", image_paths(paths["candidates"])
 
 
 def smoke_generate_pipeline(case_name, count):
@@ -115,4 +115,3 @@ def import_candidates(case_name, source_folder, copy_limit):
 def import_candidates_pipeline(case_name, source_folder, copy_limit):
     status, _ = import_candidates(case_name, source_folder, copy_limit)
     return status, candidates_sheet(case_name), qc_sheet(case_name, top_n=100)
-

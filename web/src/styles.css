@@ -229,9 +229,11 @@ pre {
   color: var(--outline);
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 12px;
   padding: 0 18px;
   border-bottom: 2px solid var(--outline-variant);
+  font-weight: 500;
 }
 
 .icon-button {
@@ -550,7 +552,7 @@ pre {
 }
 
 .drop-zone {
-  min-height: 410px;
+  min-height: 320px;
   border: 3px dashed var(--outline-variant);
   border-radius: 28px;
   background: var(--surface);
@@ -571,8 +573,8 @@ pre {
 }
 
 .drop-zone .upload-orb {
-  width: 100px;
-  height: 100px;
+  width: 84px;
+  height: 84px;
   margin: 0 auto 12px;
   grid-column: 1 / -1;
   background: var(--surface-highest);
@@ -587,8 +589,35 @@ pre {
 .drop-zone strong {
   color: var(--on-surface);
   font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui;
-  font-size: 28px;
+  font-size: 26px;
   line-height: 1.2;
+}
+
+.pending-file-list {
+  display: grid;
+  gap: 10px;
+}
+
+.pending-file-list div {
+  min-height: 50px;
+  border-radius: 18px;
+  background: var(--surface-low);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+}
+
+.pending-file-list span {
+  color: var(--on-surface);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.pending-file-list b {
+  color: var(--on-variant);
+  white-space: nowrap;
 }
 
 .drop-zone small {
@@ -944,6 +973,51 @@ pre {
 .grid-form label:nth-child(2),
 .control-grid .wide {
   grid-column: 1 / -1;
+}
+
+.compact-form label:first-child,
+.compact-form label:nth-child(2) {
+  grid-column: auto;
+}
+
+.fixed-qc-note {
+  min-height: 44px;
+  border-radius: 18px;
+  background: var(--primary-container);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  margin-top: 16px;
+  font-weight: 700;
+}
+
+.preset-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.preset-list article {
+  border-radius: 18px;
+  background: var(--surface-low);
+  padding: 14px;
+  display: grid;
+  gap: 5px;
+}
+
+.preset-list strong {
+  color: var(--on-surface);
+}
+
+.preset-list span,
+.preset-list p {
+  margin: 0;
+  color: var(--on-variant);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .summary-list {

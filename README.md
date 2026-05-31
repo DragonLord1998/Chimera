@@ -20,6 +20,20 @@ The workflow is intentionally staged:
 
 The first Z-Image Turbo LoRA is not treated as the final product. It is a fast identity bootstrap model used to create a large synthetic candidate pool. The final source of truth remains the original user-provided identity references plus strict QC.
 
+## Current Implementation Boundary
+
+The current app does **not** use Flux2-PuLID, InstantID, or a dedicated Z-Image Turbo adapter job yet.
+
+What is wired today:
+
+- Upload references through the FastAPI `/references` endpoint.
+- Generate a small local candidate set with the built-in reference augmentation generator for smoke testing.
+- Score and select candidates with InsightFace/ArcFace identity QC fixed at `0.92`.
+- Caption the accepted training images with trigger-led captions.
+- Build and start an Ostris `ai-toolkit` LoRA config for `black-forest-labs/FLUX.2-klein-base-9B`.
+
+Flux2-PuLID would belong in the future identity-preserving synthetic expansion stage. Until that backend exists, the UI labels it as future/preset-only instead of presenting it as an active job.
+
 ## Why This Plan
 
 Training a final LoRA directly from 1-3 images is fragile. It can overfit pose, lighting, expression, camera angle, or clothing. Project Chimera instead uses a two-stage approach:
@@ -195,8 +209,9 @@ The current React + FastAPI app already provides the foundation:
 
 - Upload 1-3 reference images.
 - Store cases under Google Drive.
-- Import or smoke-generate candidate images.
-- Run face identity QC.
+- Run the one-photo smoke workflow: reference upload, local candidate generation, QC selection, captions, config creation, and training preflight.
+- Import or generate candidate images.
+- Run face identity QC at the fixed `0.92` identity threshold.
 - Highlight QC-selected candidates.
 - Copy selected images into the curated training folder.
 - Caption curated images.
@@ -209,6 +224,7 @@ The current React + FastAPI app already provides the foundation:
 
 Planned next implementation work:
 
+- Add a Flux2-PuLID or equivalent identity-preserving generator path for synthetic expansion.
 - Add a dedicated Z-Image Turbo seed LoRA config preset.
 - Add Z-Image Turbo training adapter handling.
 - Add a 5000-image expansion job type.

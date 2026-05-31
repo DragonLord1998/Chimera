@@ -21,12 +21,33 @@ from .system import system_stats
 from .training import TrainingUnavailable, build_ai_toolkit_config, prepare_pipeline_training, start_pipeline_training
 
 
+FIXED_IDENTITY_THRESHOLD = 0.92
+DEFAULT_PIPELINE_COUNT = 10
+DEFAULT_PIPELINE_TOP_N = 10
+DEFAULT_TRIGGER = "zphchar"
+DEFAULT_BASE_CAPTION = "realistic photo, natural skin texture, clean lighting, high detail"
+DEFAULT_MODEL_NAME = "black-forest-labs/FLUX.2-klein-base-9B"
+DEFAULT_RANK = 32
+DEFAULT_STEPS = 1200
+DEFAULT_LR = "1e-4"
+DEFAULT_SAMPLE_EVERY = 200
+DEFAULT_SAVE_EVERY = 250
+DEFAULT_SAMPLE_PROMPTS = "\n".join(
+    [
+        "zphchar person, professional portrait, soft studio lighting",
+        "zphchar person, close-up portrait, neutral background",
+        "zphchar person, three-quarter portrait, natural daylight",
+        "zphchar person, side profile portrait, clean background",
+    ]
+)
+
+
 class CaseCreate(BaseModel):
     label: str = "character"
 
 
 class SmokeRequest(BaseModel):
-    count: int = 200
+    count: int = DEFAULT_PIPELINE_COUNT
 
 
 class ImportRequest(BaseModel):
@@ -36,40 +57,56 @@ class ImportRequest(BaseModel):
 
 class GenerationRequest(BaseModel):
     command: str
-    trigger: str = "zphchar"
-    count: int = 200
+    trigger: str = DEFAULT_TRIGGER
+    count: int = DEFAULT_PIPELINE_COUNT
 
 
 class QcRequest(BaseModel):
-    identity_threshold: float = 0.32
+    identity_threshold: float = FIXED_IDENTITY_THRESHOLD
     min_face_area: float = 0.01
-    top_n: int = 100
+    top_n: int = DEFAULT_PIPELINE_TOP_N
 
 
 class CaptionRequest(BaseModel):
-    trigger: str = "zphchar"
-    base_caption: str = "natural skin texture, realistic photo, high detail"
+    trigger: str = DEFAULT_TRIGGER
+    base_caption: str = DEFAULT_BASE_CAPTION
 
 
 class TrainingPrepareRequest(BaseModel):
-    trigger: str = "zphchar"
-    base_caption: str = "natural skin texture, realistic photo, high detail"
-    model_name: str = "black-forest-labs/FLUX.2-klein-base-9B"
-    rank: int = 64
-    steps: int = 2000
-    lr: str = "1e-4"
-    sample_prompts: str = ""
-    sample_every: int = 250
-    save_every: int = 250
+    trigger: str = DEFAULT_TRIGGER
+    base_caption: str = DEFAULT_BASE_CAPTION
+    model_name: str = DEFAULT_MODEL_NAME
+    rank: int = DEFAULT_RANK
+    steps: int = DEFAULT_STEPS
+    lr: str = DEFAULT_LR
+    sample_prompts: str = DEFAULT_SAMPLE_PROMPTS
+    sample_every: int = DEFAULT_SAMPLE_EVERY
+    save_every: int = DEFAULT_SAVE_EVERY
 
 
 class TrainingStartRequest(BaseModel):
     config_path: str
-    trigger: str = "zphchar"
-    steps: int = 2000
-    sample_prompts: str = ""
-    sample_every: int = 250
-    save_every: int = 250
+    trigger: str = DEFAULT_TRIGGER
+    steps: int = DEFAULT_STEPS
+    sample_prompts: str = DEFAULT_SAMPLE_PROMPTS
+    sample_every: int = DEFAULT_SAMPLE_EVERY
+    save_every: int = DEFAULT_SAVE_EVERY
+
+
+class PipelineRunRequest(BaseModel):
+    trigger: str = DEFAULT_TRIGGER
+    count: int = DEFAULT_PIPELINE_COUNT
+    top_n: int = DEFAULT_PIPELINE_TOP_N
+    min_face_area: float = 0.01
+    base_caption: str = DEFAULT_BASE_CAPTION
+    model_name: str = DEFAULT_MODEL_NAME
+    rank: int = DEFAULT_RANK
+    steps: int = DEFAULT_STEPS
+    lr: str = DEFAULT_LR
+    sample_prompts: str = DEFAULT_SAMPLE_PROMPTS
+    sample_every: int = DEFAULT_SAMPLE_EVERY
+    save_every: int = DEFAULT_SAVE_EVERY
+    start_training: bool = True
 
 
 def safe_case_name(case_name: str) -> str:
@@ -212,7 +249,7 @@ def create_app() -> FastAPI:
     @app.post("/api/cases/{case_name}/qc/score")
     def post_qc_score(case_name: str, payload: QcRequest):
         try:
-            status, df = score_candidates(case_name, payload.identity_threshold, payload.min_face_area)
+            status, df = score_candidates(case_name, FIXED_IDENTITY_THRESHOLD, payload.min_face_area)
         except FaceQcUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {"status": status, "qc": dataframe_records(df), "state": case_payload(case_name, payload.top_n)}
@@ -220,7 +257,7 @@ def create_app() -> FastAPI:
     @app.post("/api/cases/{case_name}/qc/score-select")
     def post_qc_score_select(case_name: str, payload: QcRequest):
         try:
-            status, df, _, _ = score_select_pipeline(case_name, payload.identity_threshold, payload.min_face_area, payload.top_n)
+            status, df, _, _ = score_select_pipeline(case_name, FIXED_IDENTITY_THRESHOLD, payload.min_face_area, payload.top_n)
         except FaceQcUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {"status": status, "qc": dataframe_records(df), "state": case_payload(case_name, payload.top_n)}
@@ -276,6 +313,64 @@ def create_app() -> FastAPI:
         except TrainingUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         return {"status": status, "log": log, "state": case_payload(case_name)}
+
+    @app.post("/api/cases/{case_name}/pipeline/run")
+    def post_pipeline_run(case_name: str, payload: PipelineRunRequest):
+        statuses = []
+        count = max(1, int(payload.count or DEFAULT_PIPELINE_COUNT))
+        top_n = max(1, int(payload.top_n or count))
+
+        smoke_status, _ = smoke_generate(case_name, count)
+        statuses.append(smoke_status)
+
+        try:
+            qc_status, _, _, _ = score_select_pipeline(
+                case_name,
+                FIXED_IDENTITY_THRESHOLD,
+                payload.min_face_area,
+                top_n,
+            )
+        except FaceQcUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        statuses.append(qc_status)
+
+        prepare_status, config_path, _, _, _, _ = prepare_pipeline_training(
+            case_name,
+            payload.trigger,
+            payload.base_caption,
+            payload.model_name,
+            payload.rank,
+            payload.steps,
+            payload.lr,
+            payload.sample_prompts,
+            payload.sample_every,
+            payload.save_every,
+        )
+        statuses.append(prepare_status)
+
+        train_log = ""
+        if payload.start_training:
+            try:
+                train_status, _, _, _, train_log = start_pipeline_training(
+                    case_name,
+                    config_path,
+                    payload.trigger,
+                    payload.steps,
+                    payload.sample_prompts,
+                    payload.sample_every,
+                    payload.save_every,
+                )
+                statuses.append(train_status)
+            except TrainingUnavailable as exc:
+                statuses.append(f"Training setup error: {exc}")
+
+        return {
+            "status": "\n".join(statuses),
+            "config_path": config_path,
+            "fixed_identity_threshold": FIXED_IDENTITY_THRESHOLD,
+            "log": train_log,
+            "state": case_payload(case_name, top_n),
+        }
 
     @app.get("/api/cases/{case_name}/dashboard")
     def get_dashboard(case_name: str, steps: int = 2000, sample_every: int = 250, save_every: int = 250):

@@ -44,8 +44,11 @@ def ensure_case(case_name):
 def list_cases():
     base = WORK_ROOT / "cases"
     base.mkdir(parents=True, exist_ok=True)
-    cases = sorted([p.name for p in base.iterdir() if p.is_dir()], reverse=True)
-    return cases or ["default"]
+    cases = [p.name for p in base.iterdir() if p.is_dir()]
+    ordered = sorted([case for case in cases if case != "default"], reverse=True)
+    if "default" in cases:
+        ordered.append("default")
+    return ordered or ["default"]
 
 
 def create_case(label):
@@ -60,4 +63,3 @@ def image_paths(folder):
         return []
     paths = [p for p in folder.rglob("*") if p.suffix.lower() in IMAGE_EXTS]
     return [str(p) for p in sorted(paths)]
-

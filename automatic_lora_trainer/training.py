@@ -24,12 +24,13 @@ def build_ai_toolkit_config(case_name, trigger, model_name, rank, steps, lr, sam
     config_dir = AI_TOOLKIT_DIR / "config"
     config_dir.mkdir(parents=True, exist_ok=True)
     cfg_path = config_dir / f"lora_factory_{clean_slug(case_name)}.yml"
-    prompts = [p.strip() for p in sample_prompts.splitlines() if p.strip()] or [
+    prompts = [p.strip().replace("[trigger]", trigger) for p in sample_prompts.splitlines() if p.strip()] or [
         "[trigger] person, studio portrait, plain white background",
         "[trigger] person, side profile photo, natural lighting",
         "[trigger] person, full body photo, wearing a black jacket",
         "[trigger] person, cinematic close-up, night street",
     ]
+    prompts = [prompt.replace("[trigger]", trigger) for prompt in prompts]
     cfg = {
         "job": "extension",
         "config": {

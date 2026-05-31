@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Activity,
-  Bell,
   Check,
   CheckCircle2,
   Cpu,
@@ -17,8 +16,6 @@ import {
   Play,
   RefreshCcw,
   Save,
-  Search,
-  Settings,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -59,6 +56,54 @@ const defaultSamplePrompts = `[trigger] person, studio portrait, plain white bac
 [trigger] person, half body photo, outdoor background
 [trigger] person, fashion editorial portrait
 [trigger] person, close-up portrait, soft daylight`;
+
+const fixedIdentityThreshold = 0.92;
+
+const modelPresets = [
+  {
+    label: "FLUX",
+    status: "Actionable now",
+    rank: 32,
+    steps: 1200,
+    lr: "1e-4",
+    caption: "Trigger first, class noun second, then only visible framing/light/context. Do not caption permanent identity traits.",
+  },
+  {
+    label: "Z-Image",
+    status: "Preset only",
+    rank: 32,
+    steps: 900,
+    lr: "8e-5",
+    caption: "Short trigger-led captions with simple visible scene tokens; keep identity anchored by QC, not by facial descriptions.",
+  },
+  {
+    label: "Wan",
+    status: "Preset only",
+    rank: 32,
+    steps: 1600,
+    lr: "8e-5",
+    caption: "Caption subject, shot type, motion/pose, lighting, and camera distance; keep trigger token stable across frames.",
+  },
+  {
+    label: "LTX",
+    status: "Preset only",
+    rank: 16,
+    steps: 1400,
+    lr: "8e-5",
+    caption: "Compact trigger-led captions for shot type, motion, and scene; avoid over-describing facial identity.",
+  },
+];
+
+const defaultTraining = {
+  trigger: "zphchar",
+  base_caption: "realistic photo, natural skin texture, clean lighting, high detail",
+  model_name: "black-forest-labs/FLUX.2-klein-base-9B",
+  rank: 32,
+  steps: 1200,
+  lr: "1e-4",
+  sample_every: 200,
+  save_every: 250,
+};
 
 async function request(path, options = {}) {
   const response = await fetch(`${API}${path}`, {
@@ -126,15 +171,15 @@ function AppShell({
         </button>
         <PhaseNav activePhase={activePhase} setActivePhase={setActivePhase} />
         <div className="top-actions">
-          <div className="search-pill">
-            <Search size={16} />
-            <span>Search models, configs...</span>
-          </div>
-          <button className="icon-button" aria-label="Notifications">
-            <Bell size={20} />
+          <button className="search-pill" type="button" onClick={() => setUtilityView("datasets")}>
+            <Database size={16} />
+            <span>Dataset snapshot</span>
           </button>
-          <button className="icon-button" aria-label="Settings">
-            <Settings size={20} />
+          <button className="icon-button" aria-label="Open logs" onClick={() => setUtilityView("logs")}>
+            <FileText size={20} />
+          </button>
+          <button className="icon-button" aria-label="Runtime access" onClick={() => setUtilityView("terminal")}>
+            <SquareTerminal size={20} />
           </button>
         </div>
       </header>
@@ -179,7 +224,7 @@ function AppShell({
             className={cx("rail-link", utilityView === "terminal" && "active")}
             onClick={() => setUtilityView("terminal")}
           >
-            <SquareTerminal size={18} /> Terminal
+            <SquareTerminal size={18} /> Runtime Access
           </button>
         </nav>
       </aside>
@@ -194,6 +239,7 @@ function AppShell({
             <label>
               Case
               <select
+                aria-label="Case"
                 value={activeCase}
                 onChange={(event) => setActiveCase(event.target.value)}
               >
@@ -407,35 +453,81 @@ function TrainingOverview({ dashboard, training, samplePrompts, configPath, onPr
   );
 }
 
-function IngestPhase({ state, files, setFiles, consent, setConsent, busy, onSaveReferences, caseLabel, setCaseLabel }) {
+function IngestPhase({ state, files, setFiles, consent, setConsent, busy, onRunPipeline, caseLabel, setCaseLabel, count, setCount, qc, setQc, training, setTraining }) {
   return (
     <>
       <PageHeader
         eyebrow="Phase 1: Ingest"
-        title="Provide Primary Subjects"
-        description="Upload 1 to 3 clear reference images. These become the source anchors for identity scoring and synthetic expansion."
+        title="Upload One Photo"
+        description="Review the run settings, upload one clear reference, then Chimera runs the current pipeline automatically."
       />
       <section className="ingest-layout">
-        <SurfaceCard className="upload-hero">
-          <label className="drop-zone">
-            <input type="file" multiple accept="image/*" onChange={(event) => setFiles([...event.target.files])} />
-            <span className="upload-orb"><UploadCloud size={36} /></span>
-            <strong>Drag and drop photos here</strong>
-            <small>or click to browse local files</small>
-            <em>JPG</em><em>PNG</em><em>WEBP</em>
-          </label>
-          <div className="upload-footer">
-            <label className="check-line">
-              <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-              I have consent and rights to train this identity
+        <div className="main-stack">
+          <SurfaceCard className="upload-hero">
+            <label className="drop-zone">
+              <input type="file" multiple accept="image/*" onChange={(event) => setFiles([...event.target.files])} />
+              <span className="upload-orb"><UploadCloud size={36} /></span>
+              <strong>Drag and drop photos here</strong>
+              <small>or click to browse local files</small>
+              <em>JPG</em><em>PNG</em><em>WEBP</em>
             </label>
-            <button className="primary" disabled={busy || !files.length || !consent} onClick={onSaveReferences}>
-              <UploadCloud size={16} /> Save References
-            </button>
-          </div>
-        </SurfaceCard>
+            <div className="upload-footer">
+              <label className="check-line">
+                <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
+                I have consent and rights to train this identity
+              </label>
+              <button className="primary" disabled={busy || !files.length || !consent} onClick={onRunPipeline}>
+                <UploadCloud size={16} /> Run Full Pipeline
+              </button>
+            </div>
+          </SurfaceCard>
+
+          {files.length > 0 && (
+            <SurfaceCard title="Pending Input" icon={ImagePlus}>
+              <div className="pending-file-list">
+                {files.map((file) => (
+                  <div key={`${file.name}-${file.size}`}>
+                    <span>{file.name}</span>
+                    <b>{(file.size / 1024 / 1024).toFixed(2)} MB</b>
+                  </div>
+                ))}
+              </div>
+            </SurfaceCard>
+          )}
+
+          <ImageGallery title="Reference Anchors" items={state?.refs || []} empty="Saved references will appear here" />
+
+          <SurfaceCard title="Caption Strategy" icon={FileText}>
+            <label>Caption suffix <input value={training.base_caption} onChange={(event) => setTraining({ ...training, base_caption: event.target.value })} /></label>
+            <div className="preset-list">
+              {modelPresets.map((preset) => (
+                <article key={preset.label}>
+                  <strong>{preset.label}</strong>
+                  <span>{preset.status}</span>
+                  <p>{preset.caption}</p>
+                </article>
+              ))}
+            </div>
+          </SurfaceCard>
+        </div>
 
         <div className="side-stack">
+          <SurfaceCard title="Run Settings" icon={SlidersHorizontal}>
+            <div className="grid-form compact-form">
+              <label>Candidate count <input type="number" min="1" value={count} onChange={(event) => setCount(Number(event.target.value))} /></label>
+              <label>Keep after QC <input type="number" min="1" value={qc.top_n} onChange={(event) => setQc({ ...qc, top_n: Number(event.target.value) })} /></label>
+              <label>Trigger <input value={training.trigger} onChange={(event) => setTraining({ ...training, trigger: event.target.value })} /></label>
+              <label>Rank <input type="number" min="1" value={training.rank} onChange={(event) => setTraining({ ...training, rank: Number(event.target.value) })} /></label>
+              <label>Steps <input type="number" min="1" value={training.steps} onChange={(event) => setTraining({ ...training, steps: Number(event.target.value) })} /></label>
+              <label>Learning rate <input value={training.lr} onChange={(event) => setTraining({ ...training, lr: event.target.value })} /></label>
+              <label>Sample every <input type="number" min="1" value={training.sample_every} onChange={(event) => setTraining({ ...training, sample_every: Number(event.target.value) })} /></label>
+              <label>Checkpoint every <input type="number" min="1" value={training.save_every} onChange={(event) => setTraining({ ...training, save_every: Number(event.target.value) })} /></label>
+            </div>
+            <div className="fixed-qc-note">
+              <ShieldCheck size={16} />
+              Identity QC is fixed at {Math.round(fixedIdentityThreshold * 100)}% similarity.
+            </div>
+          </SurfaceCard>
           <SurfaceCard title="Quality Requirements" icon={ShieldCheck}>
             <ul className="quality-list">
               <li><CheckCircle2 size={16} /> Clear face, no heavy occlusion</li>
@@ -456,7 +548,6 @@ function IngestPhase({ state, files, setFiles, consent, setConsent, busy, onSave
           </SurfaceCard>
         </div>
       </section>
-      <ImageGallery title="Reference Anchors" items={state?.refs || []} empty="Saved references will appear here" />
     </>
   );
 }
@@ -466,8 +557,8 @@ function SeedPhase({ state, dashboard, training, setTraining, samplePrompts, set
     <>
       <PageHeader
         eyebrow="Phase 2: Identity Seed"
-        title="Identity Seed LoRA (Z-Image Turbo)"
-        description="Configure the fast bootstrap identity run. This screen uses the current ai-toolkit actions and does not claim a dedicated Z-Image adapter job yet."
+        title="Identity Seed Training Settings"
+        description="Review and adjust the current ai-toolkit identity LoRA settings. Z-Image-specific adapter training remains a future backend target."
         actions={<span className="state-chip">{configPath ? "Config ready" : "Config pending"}</span>}
       />
       <section className="bento two-col">
@@ -522,7 +613,7 @@ function ExpansionPhase({ state, count, setCount, importFolder, setImportFolder,
           <SurfaceCard title="Expansion Controls" icon={Wand2}>
             <div className="control-grid">
               <label>Target candidates <input type="number" value={count} onChange={(event) => setCount(Number(event.target.value))} /></label>
-              <button disabled={busy} onClick={onSmoke}><Sparkles size={16} /> Smoke Test</button>
+              <button disabled={busy} onClick={onSmoke}><Sparkles size={16} /> Generate Candidates</button>
               <label className="wide">Import folder <input value={importFolder} onChange={(event) => setImportFolder(event.target.value)} /></label>
               <button disabled={busy} onClick={onImport}><FolderInput size={16} /> Import Images</button>
             </div>
@@ -583,10 +674,10 @@ function QcPhase({ state, qc, setQc, qcSummary, qcByPath, busy, onScoreSelect, d
             </div>
           </SurfaceCard>
           <SurfaceCard title="ArcFace Similarity" icon={Gauge}>
-            <label>
-              Threshold <strong>{qc.identity_threshold}</strong>
-              <input type="range" min="0" max="1" step="0.01" value={qc.identity_threshold} onChange={(event) => setQc({ ...qc, identity_threshold: Number(event.target.value) })} />
-            </label>
+            <div className="fixed-qc-note">
+              <ShieldCheck size={16} />
+              Fixed at {Math.round(fixedIdentityThreshold * 100)}% similarity.
+            </div>
             <label>Min face <input type="number" step="0.001" value={qc.min_face_area} onChange={(event) => setQc({ ...qc, min_face_area: Number(event.target.value) })} /></label>
             <label>Keep <input type="number" value={qc.top_n} onChange={(event) => setQc({ ...qc, top_n: Number(event.target.value) })} /></label>
             <button className="primary full" disabled={busy} onClick={onScoreSelect}><Check size={16} /> Finalize Dataset</button>
@@ -640,9 +731,9 @@ function LibraryPhase({ state, training, setTraining, samplePrompts, setSamplePr
 function FactoryPhase({ state, dashboard, training, setTraining, configPath, samplePrompts, busy, onPrepare, onStart, onRefresh }) {
   const architectures = [
     { label: "FLUX", detail: "Current ai-toolkit config", active: true },
-    { label: "Z-Image", detail: "Preset pending" },
-    { label: "Wan", detail: "Preset pending" },
-    { label: "LTX", detail: "Preset pending" },
+    { label: "Z-Image", detail: "Not wired yet" },
+    { label: "Wan", detail: "Not wired yet" },
+    { label: "LTX", detail: "Not wired yet" },
   ];
   return (
     <>
@@ -725,8 +816,8 @@ function UtilityPanel({ view, state, dashboard, qcSummary, configPath, training,
     },
     terminal: {
       eyebrow: "Session Utility",
-      title: "Terminal Access",
-      description: "Browser terminal control is not implemented in the backend yet. This panel shows the real current access boundary.",
+      title: "Runtime Access",
+      description: "Current runtime access paths and the proxy-only browser boundary.",
     },
   };
   const meta = titles[view];
@@ -850,20 +941,11 @@ function App() {
   const [busy, setBusy] = useState(false);
   const [files, setFiles] = useState([]);
   const [consent, setConsent] = useState(false);
-  const [count, setCount] = useState(5000);
+  const [count, setCount] = useState(10);
   const [importFolder, setImportFolder] = useState("/content/drive/MyDrive/GenAI/ComfyUI/output");
   const [generationCommand, setGenerationCommand] = useState(defaultGenerationCommand);
-  const [qc, setQc] = useState({ identity_threshold: 0.32, min_face_area: 0.01, top_n: 100 });
-  const [training, setTraining] = useState({
-    trigger: "zphchar",
-    base_caption: "natural skin texture, realistic photo, high detail",
-    model_name: "black-forest-labs/FLUX.2-klein-base-9B",
-    rank: 64,
-    steps: 2000,
-    lr: "1e-4",
-    sample_every: 250,
-    save_every: 250,
-  });
+  const [qc, setQc] = useState({ identity_threshold: fixedIdentityThreshold, min_face_area: 0.01, top_n: 10 });
+  const [training, setTraining] = useState(defaultTraining);
   const [samplePrompts, setSamplePrompts] = useState(defaultSamplePrompts);
   const [configPath, setConfigPath] = useState("");
   const [activePhase, setActivePhase] = useState("ingest");
@@ -969,13 +1051,30 @@ function App() {
       const payload = await request("/api/cases", { method: "POST", body: JSON.stringify({ label: caseLabel }) });
       setCases(payload.cases);
       setActiveCase(payload.case);
-      return payload;
+      return { ...payload, status: `Created case: ${payload.case}` };
     }),
     saveReferences: () => runAction(async () => {
       const data = new FormData();
       data.append("consent", String(consent));
       files.forEach((file) => data.append("files", file));
       return request(`/api/cases/${encodeURIComponent(activeCase)}/references`, { method: "POST", body: data });
+    }),
+    runFullPipeline: () => runAction(async () => {
+      const data = new FormData();
+      data.append("consent", String(consent));
+      files.forEach((file) => data.append("files", file));
+      await request(`/api/cases/${encodeURIComponent(activeCase)}/references`, { method: "POST", body: data });
+      return request(`/api/cases/${encodeURIComponent(activeCase)}/pipeline/run`, {
+        method: "POST",
+        body: JSON.stringify({
+          ...training,
+          count,
+          top_n: qc.top_n,
+          min_face_area: qc.min_face_area,
+          sample_prompts: samplePrompts,
+          start_training: true,
+        }),
+      });
     }),
     smoke: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/smoke`, { method: "POST", body: JSON.stringify({ count }) })),
     importImages: () => runAction(() => request(`/api/cases/${encodeURIComponent(activeCase)}/import`, { method: "POST", body: JSON.stringify({ source_folder: importFolder, copy_limit: count }) })),
@@ -1005,9 +1104,15 @@ function App() {
         consent={consent}
         setConsent={setConsent}
         busy={busy}
-        onSaveReferences={actions.saveReferences}
+        onRunPipeline={actions.runFullPipeline}
         caseLabel={caseLabel}
         setCaseLabel={setCaseLabel}
+        count={count}
+        setCount={setCount}
+        qc={qc}
+        setQc={setQc}
+        training={training}
+        setTraining={setTraining}
       />
     ),
     seed: (
