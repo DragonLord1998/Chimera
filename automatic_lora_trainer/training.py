@@ -142,9 +142,13 @@ def start_tracked_training(case_name, config_path, total_steps):
     case_name = ensure_case(case_name)
     run_py = AI_TOOLKIT_DIR / "run.py"
     if not run_py.exists():
-        raise TrainingUnavailable(
-            f"ai-toolkit run.py was not found at {run_py}. Install ai-toolkit or launch Chimera with INSTALL_AI_TOOLKIT=1."
-        )
+        message = f"ai-toolkit run.py was not found at {run_py}. Install ai-toolkit or launch Chimera with INSTALL_AI_TOOLKIT=1."
+        lp = log_path(case_name, "train")
+        lp.parent.mkdir(parents=True, exist_ok=True)
+        with lp.open("ab", buffering=0) as handle:
+            handle.write(f"\n\n[{dt.datetime.now().isoformat()}] Training setup error\n{message}\n".encode())
+        write_training_state(case_name, status="setup_error", pid=None, current_step=None, total_steps=int(float(total_steps or 1)), exit_code=None, last_step_line=message)
+        raise TrainingUnavailable(message)
     key = (case_name, "train")
     existing = RUNNING.get(key)
     if existing and existing.poll() is None:
