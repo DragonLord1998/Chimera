@@ -1,5 +1,7 @@
-from .settings import AI_TOOLKIT_DIR, HOST, PORT, SHARE, WORK_ROOT
-from .ui import build_app
+import uvicorn
+
+from .api import create_app
+from .settings import AI_TOOLKIT_DIR, HOST, PORT, WORK_ROOT
 
 
 def main():
@@ -12,7 +14,7 @@ def main():
         print(output.eval_js(f"google.colab.kernel.proxyPort({PORT})"))
     except Exception:
         pass
-    build_app().queue().launch(server_name=HOST, server_port=PORT, share=SHARE)
+    uvicorn.run(create_app(), host=HOST, port=PORT)
 
 
 if __name__ == "__main__":

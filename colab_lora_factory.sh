@@ -9,7 +9,7 @@ WORK_ROOT="${WORK_ROOT:-/content/drive/MyDrive/GenAI/Project Chimera}"
 FALLBACK_WORK_ROOT="${FALLBACK_WORK_ROOT:-/content/Project Chimera}"
 PORT="${PORT:-7860}"
 HOST="${HOST:-0.0.0.0}"
-SHARE="${SHARE:-0}"
+INSTALL_FRONTEND="${INSTALL_FRONTEND:-1}"
 INSTALL_FACE_QC="${INSTALL_FACE_QC:-1}"
 INSTALL_AI_TOOLKIT="${INSTALL_AI_TOOLKIT:-1}"
 INSTALL_TORCH="${INSTALL_TORCH:-0}"
@@ -39,6 +39,21 @@ echo "[chimera] Installing app dependencies..."
 python3 -m pip install -q --upgrade pip
 python3 -m pip install -q -r "$SCRIPT_DIR/requirements.txt"
 
+if [[ "$INSTALL_FRONTEND" == "1" ]]; then
+  echo "[chimera] Building React frontend..."
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "[chimera] npm not found. Installing nodejs/npm with apt."
+    apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs npm
+  fi
+  if [[ -f "$SCRIPT_DIR/web/package-lock.json" ]]; then
+    npm --prefix "$SCRIPT_DIR/web" ci
+  else
+    npm --prefix "$SCRIPT_DIR/web" install
+  fi
+  npm --prefix "$SCRIPT_DIR/web" run build
+fi
+
 if [[ "$INSTALL_FACE_QC" == "1" ]]; then
   echo "[chimera] Installing optional face QC dependencies..."
   python3 -m pip install -q insightface onnxruntime-gpu || \
@@ -66,13 +81,12 @@ fi
 
 echo "[chimera] Starting app on ${HOST}:${PORT}."
 echo "[chimera] Work root: ${WORK_ROOT}"
-echo "[chimera] Set SHARE=1 if you need a temporary Gradio public URL."
+echo "[chimera] Open the Colab proxy URL printed by the Python server."
 
 export AI_TOOLKIT_DIR
 export WORK_ROOT
 export HOST
 export PORT
-export SHARE
 export FACE_MODEL
 export PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}"
 

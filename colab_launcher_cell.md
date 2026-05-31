@@ -21,7 +21,7 @@ REPO_URL = "https://github.com/philipkavalam/project-chimera.git"
 BRANCH = ""  # leave empty to use the repo default branch, or set "main"
 REPO_DIR = Path("/content/project-chimera")
 FRESH_CLONE_EVERY_RUN = True
-SHARE = False
+PORT = 7860
 
 if FRESH_CLONE_EVERY_RUN and REPO_DIR.exists():
     shutil.rmtree(REPO_DIR)
@@ -46,12 +46,11 @@ if not script_path.exists():
 os.chmod(script_path, 0o755)
 
 env = os.environ.copy()
-if SHARE:
-    env["SHARE"] = "1"
+env["PORT"] = str(PORT)
 
 print(f"Launching: {script_path}")
 print("Watch the output below for the Colab proxy URL.")
 subprocess.run(["bash", str(script_path)], check=True, env=env)
 ```
 
-Set `SHARE = True` only if you want a temporary public Gradio URL. The default uses the Colab proxy URL.
+The app is served through FastAPI on the Colab proxy URL printed by the startup output.

@@ -5,7 +5,7 @@ Repo-based Colab Pro+ launcher for an automatic character LoRA workflow.
 The expected Colab flow is:
 
 ```text
-Mount Drive -> clone this repo fresh -> launch the local Gradio app -> use the Colab proxy URL
+Mount Drive -> clone this repo fresh -> build the React app -> launch FastAPI -> use the Colab proxy URL
 ```
 
 ## Run In Colab
@@ -22,8 +22,10 @@ Then run the cell. It will:
 
 1. Ask for Google Drive permission through `drive.mount("/content/drive")`.
 2. Fresh-clone the repo into `/content/project-chimera`.
-3. Run `colab_lora_factory.sh`.
-4. Print the Colab proxy URL for the app.
+3. Install backend dependencies.
+4. Build the React frontend.
+5. Run `colab_lora_factory.sh`.
+6. Print the Colab proxy URL for the app.
 
 The launcher defaults to a fresh clone on every run:
 
@@ -31,7 +33,7 @@ The launcher defaults to a fresh clone on every run:
 FRESH_CLONE_EVERY_RUN = True
 ```
 
-Set `SHARE = True` in the cell only if you want a temporary public Gradio URL. The default uses the Colab proxy URL.
+The app is served on the printed Colab proxy URL. There is no separate public share tunnel in this version.
 
 ## Manual Terminal Run
 
@@ -45,8 +47,8 @@ bash /content/project-chimera/colab_lora_factory.sh
 Useful overrides:
 
 ```bash
-SHARE=1 bash /content/project-chimera/colab_lora_factory.sh
 PORT=7861 bash /content/project-chimera/colab_lora_factory.sh
+INSTALL_FRONTEND=0 bash /content/project-chimera/colab_lora_factory.sh
 INSTALL_AI_TOOLKIT=0 bash /content/project-chimera/colab_lora_factory.sh
 FACE_MODEL=buffalo_l bash /content/project-chimera/colab_lora_factory.sh
 ```
@@ -89,12 +91,12 @@ The included "Smoke Test Generate" button is only for testing the UI. For produc
 
 ## Project Structure
 
-This is a normal Python app now, not a generated single-file script.
+This is a split React + FastAPI app, not a generated single-file script.
 
 ```text
 automatic_lora_trainer/
   app.py          # application entrypoint
-  ui.py           # Gradio layout and event wiring
+  api.py          # FastAPI routes and static frontend serving
   paths.py        # case folders and image discovery
   state.py        # logs, running processes, training_state.json
   generation.py   # reference upload, imports, smoke generation, command runner
@@ -110,6 +112,7 @@ automatic_lora_trainer/
 Root files:
 
 ```text
+web/                         # React/Vite frontend
 colab_lora_factory.sh       # small Colab bootstrap
 colab_launcher_cell.md      # notebook cell that mounts Drive and clones this repo
 requirements.txt            # runtime dependencies used by the bootstrap

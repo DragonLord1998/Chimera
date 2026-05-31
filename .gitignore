@@ -4,7 +4,8 @@ __pycache__/
 .env
 .venv/
 venv/
+node_modules/
 dist/
+web/dist/
 build/
 *.egg-info/
-

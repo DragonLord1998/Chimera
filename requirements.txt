@@ -1,4 +1,6 @@
-gradio
+fastapi
+uvicorn[standard]
+python-multipart
 pillow
 numpy
 pandas
@@ -9,4 +11,3 @@ tqdm
 opencv-python-headless
 scikit-image
 huggingface_hub
-
