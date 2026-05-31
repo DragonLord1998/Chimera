@@ -980,6 +980,10 @@ pre {
   grid-column: auto;
 }
 
+.compact-form label.wide {
+  grid-column: 1 / -1;
+}
+
 .fixed-qc-note {
   min-height: 44px;
   border-radius: 18px;

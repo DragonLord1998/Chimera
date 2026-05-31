@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,7 @@ try:
 except Exception:
     cv2 = None
 
+from .generation import read_candidate_metadata
 from .media import qc_sheet, train_sheet
 from .paths import dirs, ensure_case, image_paths
 from .settings import FACE_MODEL, WORK_ROOT
@@ -150,6 +152,7 @@ def score_candidates(case_name, identity_threshold, min_face_area):
 def auto_select(case_name, top_n):
     case_name = ensure_case(case_name)
     paths = dirs(case_name)
+    metadata = read_candidate_metadata(case_name)
     csv_path = paths["case"] / "qc_scores.csv"
     if not csv_path.exists():
         return "Run QC scoring first.", image_paths(paths["train"])
@@ -166,6 +169,11 @@ def auto_select(case_name, top_n):
         dest = paths["train"] / f"{copied + 1:04d}.png"
         with Image.open(src) as img:
             ImageOps.exif_transpose(img).convert("RGB").save(dest)
+        source_metadata = metadata.get(str(src)) or metadata.get(src.name) or metadata.get(str(row.get("name", "")))
+        if source_metadata:
+            dest.with_suffix(".json").write_text(
+                json.dumps({**source_metadata, "selected_source_file": str(src), "selected_name": dest.name}, indent=2, sort_keys=True)
+            )
         copied += 1
     return f"Selected {copied} training images into {paths['train']}.", image_paths(paths["train"])
 

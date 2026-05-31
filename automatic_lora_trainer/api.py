@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from .captioning import caption_curated, preview_captions
 from .dashboard import expected_interval_steps, training_progress
 from .face_qc import FaceQcUnavailable, score_candidates, score_select_pipeline
-from .generation import import_candidates, smoke_generate, start_background
+from .generation import GenerationUnavailable, generate_candidates, import_candidates, smoke_generate, start_background
 from .media import latest_sample_image, selected_from_qc, training_artifact_steps
 from .paths import clean_slug, create_case, dirs, ensure_case, image_paths, list_cases
 from .settings import AI_TOOLKIT_DIR, IMAGE_EXTS, WORK_ROOT
@@ -25,7 +25,8 @@ FIXED_IDENTITY_THRESHOLD = 0.92
 DEFAULT_PIPELINE_COUNT = 10
 DEFAULT_PIPELINE_TOP_N = 10
 DEFAULT_TRIGGER = "zphchar"
-DEFAULT_BASE_CAPTION = "realistic photo, natural skin texture, clean lighting, high detail"
+DEFAULT_BASE_CAPTION = ""
+DEFAULT_GENERATION_BACKEND = "flux2_pulid"
 DEFAULT_MODEL_NAME = "black-forest-labs/FLUX.2-klein-base-9B"
 DEFAULT_RANK = 32
 DEFAULT_STEPS = 1200
@@ -107,6 +108,8 @@ class PipelineRunRequest(BaseModel):
     sample_every: int = DEFAULT_SAMPLE_EVERY
     save_every: int = DEFAULT_SAVE_EVERY
     start_training: bool = True
+    generation_backend: str = DEFAULT_GENERATION_BACKEND
+    allow_smoke_fallback: bool = False
 
 
 def safe_case_name(case_name: str) -> str:
@@ -320,8 +323,17 @@ def create_app() -> FastAPI:
         count = max(1, int(payload.count or DEFAULT_PIPELINE_COUNT))
         top_n = max(1, int(payload.top_n or count))
 
-        smoke_status, _ = smoke_generate(case_name, count)
-        statuses.append(smoke_status)
+        try:
+            generation_status, _ = generate_candidates(
+                case_name,
+                count,
+                payload.trigger,
+                payload.generation_backend,
+                payload.allow_smoke_fallback,
+            )
+        except GenerationUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        statuses.append(generation_status)
 
         try:
             qc_status, _, _, _ = score_select_pipeline(

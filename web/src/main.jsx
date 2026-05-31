@@ -66,15 +66,15 @@ const modelPresets = [
     rank: 32,
     steps: 1200,
     lr: "1e-4",
-    caption: "Trigger first, class noun second, then only visible framing/light/context. Do not caption permanent identity traits.",
+    caption: "Trigger first, class noun second, then framing, pose, lighting, clothing, and background.",
   },
   {
-    label: "Z-Image",
-    status: "Preset only",
+    label: "Flux2-PuLID",
+    status: "Generator path",
     rank: 32,
     steps: 900,
     lr: "8e-5",
-    caption: "Short trigger-led captions with simple visible scene tokens; keep identity anchored by QC, not by facial descriptions.",
+    caption: "Synthetic prompt buckets provide caption tags; identity remains enforced by QC, not facial descriptions.",
   },
   {
     label: "Wan",
@@ -96,7 +96,7 @@ const modelPresets = [
 
 const defaultTraining = {
   trigger: "zphchar",
-  base_caption: "realistic photo, natural skin texture, clean lighting, high detail",
+  base_caption: "",
   model_name: "black-forest-labs/FLUX.2-klein-base-9B",
   rank: 32,
   steps: 1200,
@@ -459,7 +459,7 @@ function IngestPhase({ state, files, setFiles, consent, setConsent, busy, onRunP
       <PageHeader
         eyebrow="Phase 1: Ingest"
         title="Upload One Photo"
-        description="Review the run settings, upload one clear reference, then Chimera runs the current pipeline automatically."
+        description="Review the run settings, upload one clear reference, then Chimera uses the configured Flux2-PuLID generator before QC and LoRA training."
       />
       <section className="ingest-layout">
         <div className="main-stack">
@@ -497,8 +497,8 @@ function IngestPhase({ state, files, setFiles, consent, setConsent, busy, onRunP
 
           <ImageGallery title="Reference Anchors" items={state?.refs || []} empty="Saved references will appear here" />
 
-          <SurfaceCard title="Caption Strategy" icon={FileText}>
-            <label>Caption suffix <input value={training.base_caption} onChange={(event) => setTraining({ ...training, base_caption: event.target.value })} /></label>
+          <SurfaceCard title="Character LoRA Captioning" icon={FileText}>
+            <label>Constant suffix <input placeholder="Optional, usually empty" value={training.base_caption} onChange={(event) => setTraining({ ...training, base_caption: event.target.value })} /></label>
             <div className="preset-list">
               {modelPresets.map((preset) => (
                 <article key={preset.label}>
@@ -514,6 +514,7 @@ function IngestPhase({ state, files, setFiles, consent, setConsent, busy, onRunP
         <div className="side-stack">
           <SurfaceCard title="Run Settings" icon={SlidersHorizontal}>
             <div className="grid-form compact-form">
+              <label className="wide">Generator <input value="Flux2-PuLID" readOnly /></label>
               <label>Candidate count <input type="number" min="1" value={count} onChange={(event) => setCount(Number(event.target.value))} /></label>
               <label>Keep after QC <input type="number" min="1" value={qc.top_n} onChange={(event) => setQc({ ...qc, top_n: Number(event.target.value) })} /></label>
               <label>Trigger <input value={training.trigger} onChange={(event) => setTraining({ ...training, trigger: event.target.value })} /></label>
@@ -557,8 +558,8 @@ function SeedPhase({ state, dashboard, training, setTraining, samplePrompts, set
     <>
       <PageHeader
         eyebrow="Phase 2: Identity Seed"
-        title="Identity Seed Training Settings"
-        description="Review and adjust the current ai-toolkit identity LoRA settings. Z-Image-specific adapter training remains a future backend target."
+        title="Identity LoRA Training Settings"
+        description="The identity LoRA is trained from the curated Flux2-PuLID synthetic dataset after strict QC."
         actions={<span className="state-chip">{configPath ? "Config ready" : "Config pending"}</span>}
       />
       <section className="bento two-col">
@@ -606,14 +607,14 @@ function ExpansionPhase({ state, count, setCount, importFolder, setImportFolder,
       <PageHeader
         eyebrow="Phase 3: Synthetic Expansion"
         title="Generate Candidate Pool"
-        description="Create or import a large raw candidate set. The target count is a generation pool size, not the final dataset size."
+        description="Production generation uses Flux2-PuLID through the configured backend command. The local smoke generator is only for development validation."
       />
       <section className="bento two-col">
         <div className="main-stack">
           <SurfaceCard title="Expansion Controls" icon={Wand2}>
             <div className="control-grid">
               <label>Target candidates <input type="number" value={count} onChange={(event) => setCount(Number(event.target.value))} /></label>
-              <button disabled={busy} onClick={onSmoke}><Sparkles size={16} /> Generate Candidates</button>
+              <button disabled={busy} onClick={onSmoke}><Sparkles size={16} /> Dev Smoke Generate</button>
               <label className="wide">Import folder <input value={importFolder} onChange={(event) => setImportFolder(event.target.value)} /></label>
               <button disabled={busy} onClick={onImport}><FolderInput size={16} /> Import Images</button>
             </div>
@@ -717,7 +718,7 @@ function LibraryPhase({ state, training, setTraining, samplePrompts, setSamplePr
           </SurfaceCard>
           <SurfaceCard title="Caption Template" icon={FileText}>
             <label>Trigger <input value={training.trigger} onChange={(event) => setTraining({ ...training, trigger: event.target.value })} /></label>
-            <label>Caption suffix <input value={training.base_caption} onChange={(event) => setTraining({ ...training, base_caption: event.target.value })} /></label>
+            <label>Constant suffix <input placeholder="Optional, usually empty" value={training.base_caption} onChange={(event) => setTraining({ ...training, base_caption: event.target.value })} /></label>
           </SurfaceCard>
           <SurfaceCard title="Validation Prompts" icon={Sparkles}>
             <textarea value={samplePrompts} onChange={(event) => setSamplePrompts(event.target.value)} rows={8} />
@@ -1073,6 +1074,8 @@ function App() {
           min_face_area: qc.min_face_area,
           sample_prompts: samplePrompts,
           start_training: true,
+          generation_backend: "flux2_pulid",
+          allow_smoke_fallback: false,
         }),
       });
     }),
