@@ -1,0 +1,12 @@
+gradio
+pillow
+numpy
+pandas
+psutil
+pyyaml
+requests
+tqdm
+opencv-python-headless
+scikit-image
+huggingface_hub
+

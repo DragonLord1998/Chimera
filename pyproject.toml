@@ -1,0 +1,24 @@
+[project]
+name = "project-chimera"
+version = "0.1.0"
+description = "Colab-hosted web app for automatic character LoRA dataset curation and training."
+requires-python = ">=3.10"
+dependencies = [
+  "gradio",
+  "pillow",
+  "numpy",
+  "pandas",
+  "psutil",
+  "pyyaml",
+  "requests",
+  "tqdm",
+  "opencv-python-headless",
+  "scikit-image",
+  "huggingface_hub",
+]
+
+[project.scripts]
+project-chimera = "automatic_lora_trainer.app:main"
+
+[tool.setuptools]
+packages = ["automatic_lora_trainer"]
