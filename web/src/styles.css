@@ -296,20 +296,24 @@ pre {
 }
 
 .rail-link {
+  width: 100%;
   min-height: 48px;
   border-radius: var(--radius-pill);
+  background: transparent;
   color: var(--on-variant);
   text-decoration: none;
   display: flex;
+  justify-content: flex-start;
   align-items: center;
   gap: 12px;
   padding: 0 16px;
 }
 
-.rail-link:hover,
+.rail-link:hover:not(:disabled),
 .rail-link.active {
   background: var(--secondary-container);
   color: var(--secondary);
+  transform: none;
 }
 
 .workspace {
@@ -485,6 +489,64 @@ pre {
 .side-stack {
   display: grid;
   gap: 24px;
+}
+
+.utility-panel {
+  display: grid;
+  gap: 24px;
+  margin-bottom: 36px;
+  scroll-margin-top: 96px;
+}
+
+.utility-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.wide-card {
+  grid-column: 1 / -1;
+}
+
+.hardware-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.utility-actions {
+  margin-top: 18px;
+}
+
+.path-list {
+  display: grid;
+  gap: 14px;
+}
+
+.path-list span {
+  display: grid;
+  gap: 6px;
+  color: var(--on-variant);
+  font-size: 13px;
+}
+
+.path-list b {
+  min-height: 42px;
+  border-radius: 16px;
+  background: var(--surface-low);
+  color: var(--on-surface);
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.terminal-note {
+  display: grid;
+  gap: 12px;
+  color: var(--on-variant);
+  line-height: 1.5;
+}
+
+.terminal-note p {
+  margin: 0;
 }
 
 .drop-zone {
@@ -1032,6 +1094,7 @@ input[type="range"]::-moz-range-thumb {
   .case-controls,
   .phase-header,
   .bento.two-col,
+  .utility-grid,
   .ingest-layout,
   .qc-layout {
     grid-template-columns: 1fr;
@@ -1076,6 +1139,7 @@ input[type="range"]::-moz-range-thumb {
   .grid-form,
   .control-grid,
   .telemetry-grid,
+  .hardware-grid,
   .prompt-grid,
   .architecture-grid,
   .stat-row {

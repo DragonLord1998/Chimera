@@ -97,9 +97,16 @@ function normalizeBool(value) {
   return value === true || value === "True" || value === "true" || value === 1 || value === "1";
 }
 
+function hashUtilityView() {
+  const hash = window.location.hash.replace("#", "");
+  return ["hardware", "datasets", "logs", "terminal"].includes(hash) ? hash : "";
+}
+
 function AppShell({
   activePhase,
   setActivePhase,
+  utilityView,
+  setUtilityView,
   cases,
   activeCase,
   setActiveCase,
@@ -146,18 +153,34 @@ function AppShell({
           <ImagePlus size={16} /> New Training Run
         </button>
         <nav className="rail-nav">
-          <a className="rail-link" href="#hardware">
+          <button
+            type="button"
+            className={cx("rail-link", utilityView === "hardware" && "active")}
+            onClick={() => setUtilityView("hardware")}
+          >
             <Cpu size={18} /> Hardware
-          </a>
-          <a className="rail-link active" href="#datasets">
+          </button>
+          <button
+            type="button"
+            className={cx("rail-link", utilityView === "datasets" && "active")}
+            onClick={() => setUtilityView("datasets")}
+          >
             <Database size={18} /> Datasets
-          </a>
-          <a className="rail-link" href="#logs">
+          </button>
+          <button
+            type="button"
+            className={cx("rail-link", utilityView === "logs" && "active")}
+            onClick={() => setUtilityView("logs")}
+          >
             <FileText size={18} /> Logs
-          </a>
-          <a className="rail-link" href="#terminal">
+          </button>
+          <button
+            type="button"
+            className={cx("rail-link", utilityView === "terminal" && "active")}
+            onClick={() => setUtilityView("terminal")}
+          >
             <SquareTerminal size={18} /> Terminal
-          </a>
+          </button>
         </nav>
       </aside>
 
@@ -681,6 +704,143 @@ function FactoryPhase({ state, dashboard, training, setTraining, configPath, sam
   );
 }
 
+function UtilityPanel({ view, state, dashboard, qcSummary, configPath, training, onClose, onRefresh, onOpenLibrary }) {
+  const stats = dashboard?.stats || {};
+  const trainingState = dashboard?.training_state || {};
+  const titles = {
+    hardware: {
+      eyebrow: "Session Utility",
+      title: "Hardware Telemetry",
+      description: "Live runtime stats from the current FastAPI dashboard payload. Missing Colab or trainer values stay as n/a.",
+    },
+    datasets: {
+      eyebrow: "Session Utility",
+      title: "Dataset Snapshot",
+      description: "Current case inventory from refs, candidates, QC rows, and curated training files.",
+    },
+    logs: {
+      eyebrow: "Session Utility",
+      title: "Runtime Logs",
+      description: "Generation and training logs saved by the existing backend actions.",
+    },
+    terminal: {
+      eyebrow: "Session Utility",
+      title: "Terminal Access",
+      description: "Browser terminal control is not implemented in the backend yet. This panel shows the real current access boundary.",
+    },
+  };
+  const meta = titles[view];
+  if (!meta) return null;
+
+  return (
+    <section className="utility-panel" id="utility-panel">
+      <PageHeader
+        eyebrow={meta.eyebrow}
+        title={meta.title}
+        description={meta.description}
+        actions={(
+          <>
+            <button onClick={onRefresh}><RefreshCcw size={16} /> Refresh</button>
+            <button onClick={onClose}>Close</button>
+          </>
+        )}
+      />
+
+      {view === "hardware" && (
+        <section className="bento utility-grid">
+          <SurfaceCard title="Runtime" icon={Cpu}>
+            <div className="telemetry-grid hardware-grid">
+              <MetricTile icon={Cpu} label="CPU" value={stats.cpu} />
+              <MetricTile icon={Database} label="RAM" value={stats.ram} />
+              <MetricTile icon={Activity} label="GPU" value={stats.gpu} />
+              <MetricTile icon={Gauge} label="VRAM" value={stats.vram_used} />
+              <MetricTile icon={Zap} label="Power" value={stats.power} />
+              <MetricTile icon={Activity} label="Temperature" value={stats.temp} />
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Tracked Training Process" icon={Activity}>
+            <div className="summary-list">
+              <span>Status <b>{dashboard?.running ? "Running" : "Idle"}</b></span>
+              <span>PID <b>{fmt(trainingState.pid)}</b></span>
+              <span>Process CPU <b>{fmt(stats.pid_cpu)}</b></span>
+              <span>Process RAM <b>{fmt(stats.pid_rss)}</b></span>
+              <span>Current step <b>{fmt(dashboard?.current_step, "0")}</b></span>
+              <span>Total steps <b>{fmt(dashboard?.total_steps || training.steps, "0")}</b></span>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Artifacts" icon={Library} className="wide-card">
+            <div className="stat-row">
+              <StatPill label="Sample files" value={dashboard?.artifacts?.sample_files?.length || 0} />
+              <StatPill label="Checkpoint files" value={dashboard?.artifacts?.checkpoint_files?.length || 0} />
+              <StatPill label="Dashboard progress" value={`${clampPercent(dashboard?.percent || 0)}%`} />
+              <StatPill label="Latest sample" value={dashboard?.latest_sample ? "available" : "n/a"} />
+            </div>
+          </SurfaceCard>
+        </section>
+      )}
+
+      {view === "datasets" && (
+        <section className="bento utility-grid">
+          <SurfaceCard title="Case Inventory" icon={Database}>
+            <div className="stat-row">
+              <StatPill label="References" value={state?.refs?.length || 0} />
+              <StatPill label="Candidates" value={state?.candidates?.length || 0} />
+              <StatPill label="QC rows" value={state?.qc?.length || 0} />
+              <StatPill label="Curated train" value={state?.train?.length || 0} tone="good" />
+            </div>
+            <div className="action-row utility-actions">
+              <button onClick={onOpenLibrary}><Library size={16} /> Open Dataset Library</button>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="QC Result" icon={ShieldCheck}>
+            <div className="summary-list">
+              <span>Total evaluated <b>{qcSummary.total}</b></span>
+              <span>Passed <b>{qcSummary.passed}</b></span>
+              <span>Failed <b>{qcSummary.failed}</b></span>
+              <span>Pending <b>{qcSummary.pending}</b></span>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Storage" icon={FolderInput} className="wide-card">
+            <div className="path-list">
+              <span>Work root <b>{state?.work_root || "n/a"}</b></span>
+              <span>Training config <b>{configPath || "n/a"}</b></span>
+            </div>
+          </SurfaceCard>
+        </section>
+      )}
+
+      {view === "logs" && (
+        <section className="bento utility-grid">
+          <SurfaceCard title="Generation Log" icon={FileText}>
+            <pre>{state?.logs?.generate || "No generation log yet"}</pre>
+          </SurfaceCard>
+          <SurfaceCard title="Training Log" icon={FileText}>
+            <pre>{state?.logs?.train || "No training log yet"}</pre>
+          </SurfaceCard>
+        </section>
+      )}
+
+      {view === "terminal" && (
+        <section className="bento utility-grid">
+          <SurfaceCard title="Current Boundary" icon={SquareTerminal}>
+            <div className="terminal-note">
+              <p>Project Chimera is proxy-only from the browser. The web app does not expose an interactive shell endpoint.</p>
+              <p>Use the Colab notebook cell or temporary SSH/tmate session for terminal operations.</p>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard title="Useful Paths" icon={FolderInput}>
+            <div className="path-list">
+              <span>Runtime app <b>/content/project-chimera</b></span>
+              <span>Persistent repo <b>/content/drive/MyDrive/GenAI/Chimera</b></span>
+              <span>Work root <b>{state?.work_root || "n/a"}</b></span>
+            </div>
+          </SurfaceCard>
+        </section>
+      )}
+    </section>
+  );
+}
+
 function App() {
   const [cases, setCases] = useState([]);
   const [activeCase, setActiveCase] = useState("");
@@ -707,6 +867,7 @@ function App() {
   const [samplePrompts, setSamplePrompts] = useState(defaultSamplePrompts);
   const [configPath, setConfigPath] = useState("");
   const [activePhase, setActivePhase] = useState("ingest");
+  const [utilityView, setUtilityViewState] = useState(hashUtilityView);
   const pollRef = useRef(null);
 
   const dashboard = state?.dashboard;
@@ -726,8 +887,23 @@ function App() {
   }, [state]);
 
   function changePhase(nextPhase) {
+    setUtilityViewState("");
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
     setActivePhase(nextPhase);
     window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  }
+
+  function changeUtilityView(nextView) {
+    setUtilityViewState(nextView);
+    window.history.replaceState(null, "", `#${nextView}`);
+    window.requestAnimationFrame(() => {
+      document.getElementById("utility-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function closeUtilityView() {
+    setUtilityViewState("");
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }
 
   async function loadCases() {
@@ -765,6 +941,12 @@ function App() {
 
   useEffect(() => {
     loadCases().catch((error) => setStatus(error.message));
+  }, []);
+
+  useEffect(() => {
+    const syncUtilityHash = () => setUtilityViewState(hashUtilityView());
+    window.addEventListener("hashchange", syncUtilityHash);
+    return () => window.removeEventListener("hashchange", syncUtilityHash);
   }, []);
 
   useEffect(() => {
@@ -889,6 +1071,8 @@ function App() {
     <AppShell
       activePhase={activePhase}
       setActivePhase={changePhase}
+      utilityView={utilityView}
+      setUtilityView={changeUtilityView}
       cases={cases}
       activeCase={activeCase}
       setActiveCase={setActiveCase}
@@ -899,6 +1083,17 @@ function App() {
       busy={busy}
       status={status}
     >
+      <UtilityPanel
+        view={utilityView}
+        state={state}
+        dashboard={dashboard}
+        qcSummary={qcSummary}
+        configPath={configPath}
+        training={training}
+        onClose={closeUtilityView}
+        onRefresh={actions.refresh}
+        onOpenLibrary={() => changePhase("library")}
+      />
       {phase}
     </AppShell>
   );
