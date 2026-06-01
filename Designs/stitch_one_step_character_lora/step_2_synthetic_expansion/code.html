@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Synthetic Expansion - Project Chimera</title>
+<script type='text/javascript' nonce='LTlUBhq67bUJtU8OFkH//Q==' src='https://contribution.usercontent.google.com/aaMdwEZbcvFMpUnQOxLCW8XfgzwD4Uy4giB6RlTSZuGhqv9RC4HyUvgeVn8eqMWE8iMseUE5a3XBbygjbd6gKn6gafHVp4aejpgGoSC66IfD7ESrwd-UjJngMxZCgWUbjznM5LyY_Y4czmeSwbPtv6t5Qta6v6YwHOeTD7vUeZGLUCtN8X67LgevHNBx0xX3Bo2-fSGLSWwzH-yVaB5adX4dUHllxJfW06YTRwg6l3ZRNNDGYLjkDKpxpbMaacVEmlcnpjsY2IHswe8nAiVkC3ToreNmd5xnxm_FtkS0uOsX67CIpJ4ouLZY781Q2cA-pfW1TR5WrAu6DskJCKiIzClAcsh4xmC480nPLACO3oGrU5ec6hNIJBMrWy6W_oWT3PwmF3OFKrHmasyeYf4w1spH6mGCkIkSYAJXT5ZHxY5XsNkLMiph3LwDuRXXaSsogcrpr6zKsBjCRrqaDtQymjtEiU7ttYZVM7Y3ZgaPW5qNW-TLCCciuLoe6C5ssDUvzfF237CuBZYmRRKV5D5S_nXy4EN_fMhdiMQo7iPbS-6zXSGkMsV9fCTQqjrAoeI5gAr94zSSNQv8TBmPWKJs0x0WdsgNryDYTUjnu8yMjdp2CdSOELGRd4DywV1631eUHbBODgb7EgsN4GlkfJe_hGh8z8g2Y9HfUWNehFDhVd8Qp1mr2XXRuGbd83a_EsKxhBLQDKqiMFoOQp87NecDvcahWJ1a-M04-kaQ7NprtzjQRbPkf14Oi5CbghcpmZp9DVhNMPMMS_Sz-92jqfMkQ2YQguSzPFNCUAl7qw'></script><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&amp;family=Roboto+Flex:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "outline": "#717783",
+                      "on-tertiary-fixed": "#2f1400",
+                      "primary-fixed-dim": "#a4c9ff",
+                      "on-primary": "#ffffff",
+                      "on-primary-fixed": "#001c39",
+                      "tertiary-container": "#a96428",
+                      "surface-dim": "#d9dadb",
+                      "surface-container-lowest": "#ffffff",
+                      "on-primary-container": "#fdfcff",
+                      "on-tertiary-container": "#fffbff",
+                      "on-tertiary-fixed-variant": "#6f3800",
+                      "tertiary-fixed": "#ffdcc4",
+                      "secondary-fixed": "#baebf5",
+                      "outline-variant": "#c1c7d3",
+                      "on-secondary-fixed": "#001f25",
+                      "on-background": "#191c1d",
+                      "surface": "#f8f9fa",
+                      "background": "#f8f9fa",
+                      "surface-tint": "#0060ac",
+                      "primary": "#005da7",
+                      "surface-variant": "#e1e3e4",
+                      "error-container": "#ffdad6",
+                      "surface-container-high": "#e7e8e9",
+                      "inverse-surface": "#2e3132",
+                      "secondary-container": "#baebf5",
+                      "primary-container": "#2976c7",
+                      "on-error-container": "#93000a",
+                      "on-surface": "#191c1d",
+                      "tertiary": "#8b4c11",
+                      "inverse-primary": "#a4c9ff",
+                      "on-secondary-container": "#3c6b75",
+                      "inverse-on-surface": "#f0f1f2",
+                      "secondary": "#36656e",
+                      "on-surface-variant": "#414751",
+                      "on-secondary": "#ffffff",
+                      "surface-bright": "#f8f9fa",
+                      "surface-container": "#edeeef",
+                      "on-tertiary": "#ffffff",
+                      "surface-container-highest": "#e1e3e4",
+                      "surface-container-low": "#f3f4f5",
+                      "on-primary-fixed-variant": "#004883",
+                      "on-error": "#ffffff",
+                      "secondary-fixed-dim": "#9fced9",
+                      "error": "#ba1a1a",
+                      "tertiary-fixed-dim": "#ffb780",
+                      "on-secondary-fixed-variant": "#1b4d56",
+                      "primary-fixed": "#d4e3ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "1rem",
+                      "lg": "2rem",
+                      "xl": "3rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "unit": "8px",
+                      "container-margin": "24px",
+                      "section-gap": "48px",
+                      "gutter": "16px"
+              },
+              "fontFamily": {
+                      "display-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "label-md": [
+                              "Roboto Flex"
+                      ],
+                      "body-lg": [
+                              "Roboto Flex"
+                      ],
+                      "headline-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "title-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-lg-mobile": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "body-md": [
+                              "Roboto Flex"
+                      ]
+              },
+              "fontSize": {
+                      "display-lg": [
+                              "57px",
+                              {
+                                      "lineHeight": "64px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "label-md": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.1px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "title-lg": [
+                              "22px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "28px",
+                              {
+                                      "lineHeight": "36px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+            },
+          }
+        }
+    </script>
+<style>
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+        }
+        
+        .ambient-shadow {
+            box-shadow: 0 10px 40px -10px rgba(0, 93, 167, 0.12);
+        }
+
+        .ambient-shadow:hover {
+            box-shadow: 0 20px 50px -10px rgba(0, 93, 167, 0.18);
+        }
+        
+        .glass-card {
+            background: rgba(248, 249, 250, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+
+        /* Sparkline simple animation */
+        @keyframes draw {
+            to { stroke-dashoffset: 0; }
+        }
+        .sparkline-path {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: draw 3s ease-out forwards;
+        }
+        
+        /* Grid generation animation */
+        @keyframes pulse-opacity {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .generating-cell {
+            animation: pulse-opacity 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body class="flex flex-col md:flex-row h-screen overflow-hidden">
+<!-- Desktop SideNav -->
+<nav class="hidden md:flex flex-col h-screen w-64 fixed left-0 top-0 rounded-r-lg bg-surface-container p-unit pt-16 z-40">
+<div class="mb-8 px-4 flex flex-col items-start">
+<span class="material-symbols-outlined text-4xl text-primary mb-2" data-weight="fill" style="font-variation-settings: &#39;FILL&#39; 1;">dataset</span>
+<h1 class="font-display-lg text-headline-lg text-primary">Project Chimera</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Active Session</p>
+</div>
+<div class="flex-grow flex flex-col gap-2 px-2 mt-4">
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-surface-variant hover:bg-surface-variant transition-all scale-[0.98] duration-200" href="#">
+<span class="material-symbols-outlined">memory</span>
+<span class="font-body-md text-body-md">Hardware</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl bg-secondary-container text-on-secondary-container font-bold scale-[0.98] duration-200" href="#">
+<span class="material-symbols-outlined">database</span>
+<span class="font-body-md text-body-md">Datasets</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-surface-variant hover:bg-surface-variant transition-all scale-[0.98] duration-200" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-body-md text-body-md">Logs</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-surface-variant hover:bg-surface-variant transition-all scale-[0.98] duration-200" href="#">
+<span class="material-symbols-outlined">terminal</span>
+<span class="font-body-md text-body-md">Terminal</span>
+</a>
+</div>
+<div class="mt-auto px-4 pb-8">
+<button class="w-full bg-primary text-on-primary py-3 rounded-full font-label-md text-label-md transition-all hover:bg-surface-tint">
+                New Training Run
+            </button>
+</div>
+</nav>
+<!-- TopNavBar (Mobile & Desktop Content Wrapper) -->
+<div class="flex-1 flex flex-col md:ml-64 h-screen overflow-hidden">
+<!-- Top App Bar -->
+<header class="w-full h-16 sticky top-0 z-50 bg-surface flex justify-between items-center px-gutter max-w-[1440px] mx-auto border-none">
+<div class="flex items-center gap-4">
+<!-- Mobile menu icon -->
+<button class="md:hidden text-on-surface-variant p-2">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<div class="hidden md:flex gap-8">
+<a class="text-on-surface-variant font-display-lg text-title-lg hover:text-primary transition-colors scale-95 duration-150" href="#">Ingest</a>
+<a class="text-primary border-b-2 border-primary pb-1 font-display-lg text-title-lg scale-95 duration-150" href="#">Synthetic Expansion</a>
+<a class="text-on-surface-variant font-display-lg text-title-lg hover:text-primary transition-colors scale-95 duration-150" href="#">Identity QC</a>
+<a class="text-on-surface-variant font-display-lg text-title-lg hover:text-primary transition-colors scale-95 duration-150" href="#">Model Factory</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-surface-variant overflow-hidden border border-outline-variant">
+<img alt="User profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDtlx4FVrjbIXAiJdrDR0tyvGTuVskdThnoLhJPANXNmuL05WRe_IXKIO_2LyEtrZ3FgTWq0YzW2N3B80LrNlaB3bVXiRdwsssg9R93TUDj06B0yOTPydbRyfuNzia-jMU_5xfRlqqEsiWGs9u7P8Du2Q_KhCtzfveqJttSYDB2iF4-aSlI18qPEor5PLm3axV_oIpb9VqYuS7KTeITOr6pVzmYiFllhEqf-KgDarq2qCf9QRfjXkfBZyRBmOkQRrw0FnOUquNrZ0g"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 overflow-y-auto p-container-margin md:p-section-gap scroll-smooth pb-32 md:pb-container-margin">
+<!-- Page Header -->
+<div class="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="px-3 py-1 bg-secondary-container text-on-secondary-container rounded-full font-label-md text-label-md flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+                            Generating
+                        </span>
+<span class="px-3 py-1 bg-surface-container-high text-on-surface-variant rounded-full font-label-md text-label-md">Flux-PuLID</span>
+</div>
+<h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-background">Phase 2: Synthetic Expansion</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant mt-2 max-w-2xl">Generating 5,000 synthetic candidates to expand the identity dataset across multiple poses, lighting conditions, and aesthetic environments.</p>
+</div>
+<div class="flex gap-3">
+<button class="bg-surface-container text-on-surface px-6 py-3 rounded-full font-label-md text-label-md hover:bg-surface-container-high transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined">pause</span> Pause
+                    </button>
+<button class="bg-error-container text-on-error-container px-6 py-3 rounded-full font-label-md text-label-md hover:opacity-90 transition-opacity flex items-center gap-2">
+<span class="material-symbols-outlined">stop</span> Abort
+                    </button>
+</div>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Main Grid Generation Area -->
+<div class="lg:col-span-8 bg-surface-container-lowest rounded-3xl p-6 ambient-shadow transition-all duration-300">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-title-lg text-title-lg text-on-surface">Candidate Grid</h3>
+<div class="font-label-md text-label-md text-primary bg-primary-container px-3 py-1 rounded-full">
+                            1,432 / 5,000
+                        </div>
+</div>
+<!-- Candidate Image Grid -->
+<div class="grid grid-cols-3 md:grid-cols-5 gap-3 h-[400px] md:h-[500px] overflow-hidden rounded-xl relative bg-surface-container">
+<!-- Fade overlay for top/bottom to look infinite -->
+<div class="absolute inset-0 pointer-events-none z-10 bg-gradient-to-b from-surface-container-lowest via-transparent to-surface-container-lowest opacity-20"></div>
+<!-- Simulated Grid Items -->
+<!-- Row 1 -->
+<div class="aspect-square bg-surface-container-high rounded-lg overflow-hidden relative group">
+<img class="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" data-alt="A hyper-realistic digital portrait of a diverse individual, rendered in a crisp, clean aesthetic. The lighting is soft and high-key, creating a calm and professional mood. The overall visual style relies on muted neural tones with bright whites and soft grays, aligning with a modern, optimistic UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIORyi2IMjPSn4f7TiSXv9tx3JMBDzeqL_09j1U8mH803n5bxWuViUsNd8wEm23R8rwdZUP6NJxCRywD7K5skzBZJqBhSAQe2IQPxTAd3XF4WfZl4DTU7n8A4PccPDTp8j0j0aQlcXx7DxG3FD9qmmLmxGBmMAXWMtFV4vzhReNYswv3PUIQfL8ON1d28I-JlKedpW2ZSHrARLiN96QkelIB14jphX6L4Pbcpahkq_SvDIddYECB013m4jk90Te0Omv1KMwDa0KTc"/>
+</div>
+<div class="aspect-square bg-surface-container-high rounded-lg overflow-hidden relative group">
+<img class="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" data-alt="A highly detailed synthetic portrait of a man, set against a pristine, light-gray background. The image has an architectural, structural feel to the lighting, embodying an expressive neuralism aesthetic. Soft, diffuse shadows create depth without harshness, evoking a sense of quiet focus and advanced technology." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCnfaIjM7NH757XpMR286wZTaSaBghKcRHZ-6yYCU6hpG6E1eeJ3PFN6V6Ciq7zGI92gTfm8flBPXI4d0ZKD8Vv37lEYoqSaa3mS-op6apDipVD8DLvxdQtBGOOj1GH1stx8vlwvUYDGx3wIBqT3M7Uv0dde7NfhU1oov6CWk5d0U_PcT23QMH2gYArwHBHmYN5nQsKDMKTkDrSbux84JNbj_AbKapUiaNzOYs58CLHKCAX0AJhcMgOgqxxIIZE5poctosgAWpsoD8"/>
+</div>
+<div class="aspect-square bg-surface-container-high rounded-lg overflow-hidden relative group">
+<img class="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" data-alt="A synthetic character portrait showcasing varied lighting conditions, featuring a modern, approachable subject. The background is a soft off-white surface, blending seamlessly into the UI&#39;s fluid geometry theme. The colors are muted yet warm, communicating an intelligent yet humble AI generation output." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAMGR2rCWGtQc_2-33toGil6Hpa9Bueu7lOkp2hGil39dACsqWzr8n0_vDhNMi7aIMUCcQ4lpLlGXUSeDNl0OK0mcyyZJRh8L0Be6jltklYIEfDJadDywVx87fALl3qQao01l4n6vvzmJuD7mNT77aUHyW3SIiSu5qON5K17chxa2R5YaKpzulVipA7JplG2PMQaQWD-gl2fPFbbl7RBHBvHABLbBezTXaYJPDPOuR4wt5zeEFjAIWLDjNxEG4nASF3ZqNw9IrNpKw"/>
+</div>
+<div class="aspect-square bg-surface-container-high rounded-lg overflow-hidden relative group hidden md:block">
+<img class="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" data-alt="A close-up synthetic face generation rendered with exceptional clarity. The lighting mimics a professional studio environment but with a softer, more organic approach typical of modern, human-centric design. The overall palette is neutral with subtle hints of cool blues and warm terracottas." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBG7Rj9YXKWYCzS4_GsFjr813c3bVkW-9hpBOWYojuf1rrx2AFTpLaqTgl7W13IRBVyU_6uoiqzueN8UHdPdXIOqb9oAr_CvrsRRqMa4ELKJbnYeI_2nI9uQmsxjmSc3mrWstFahUtumFVBHbAdJ9bn-E3buT8HK5HXDy_-SPzB4hm5X00BDfonQi07gCplr7WNOeSIqtcPlza6UZ8xhvYjLn6xLHAmbePJokpSIQwMLS_PlQarsIvcm_-j_Ag4323Uuz5AAhiIFG4"/>
+</div>
+<div class="aspect-square bg-surface-container-high rounded-lg overflow-hidden relative group hidden md:block">
+<img class="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" data-alt="A profile view of a synthetically generated individual in a bright, airy setting. The visual language is calm and focused, utilizing generous negative space around the subject. The image maintains a cool, clean aesthetic that harmonizes with a light-mode, high-performance workspace." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCSjCCfD_5uDy8756ypGtD4FkON_FYsZmuljvsXZ5Egm4tJwc2IDeT_l-wk_XSS_aQ15gq7y8ufvPZhXDss968TlGYtaafo5vwGgKC2_iHo3W0-8lkg2fvaYuM4EsX8YDvGeIMTQebM45xMD_ueU-DdiVT9AM5hVp0eyHCRq9XjJfPlxS7UXlitmXv3-fLjdbmCwkA6UTN8049gsAcMVuzxafiZjOlQ8XYUSrwXeec_hBMIV9LLVzBKZGT07wL2eL0zYhZm_Amgu4I"/>
+</div>
+<!-- Generating Rows (Placeholders) -->
+<div class="aspect-square bg-surface-variant rounded-lg generating-cell flex items-center justify-center">
+<span class="material-symbols-outlined text-outline-variant text-3xl">hourglass_empty</span>
+</div>
+<div class="aspect-square bg-surface-variant rounded-lg generating-cell flex items-center justify-center" style="animation-delay: 0.2s">
+<span class="material-symbols-outlined text-outline-variant text-3xl">hourglass_empty</span>
+</div>
+<div class="aspect-square bg-surface-variant rounded-lg generating-cell flex items-center justify-center" style="animation-delay: 0.4s">
+<span class="material-symbols-outlined text-outline-variant text-3xl">hourglass_empty</span>
+</div>
+<div class="aspect-square bg-surface-variant rounded-lg generating-cell hidden md:flex items-center justify-center" style="animation-delay: 0.6s">
+<span class="material-symbols-outlined text-outline-variant text-3xl">hourglass_empty</span>
+</div>
+<div class="aspect-square bg-surface-variant rounded-lg generating-cell hidden md:flex items-center justify-center" style="animation-delay: 0.8s">
+<span class="material-symbols-outlined text-outline-variant text-3xl">hourglass_empty</span>
+</div>
+</div>
+</div>
+<!-- Right Side Stats Panel -->
+<div class="lg:col-span-4 flex flex-col gap-6">
+<!-- Progress Buckets -->
+<div class="bg-surface-container-lowest rounded-3xl p-6 ambient-shadow transition-all duration-300">
+<h3 class="font-title-lg text-title-lg text-on-surface mb-4">Prompt Buckets</h3>
+<div class="flex flex-col gap-4">
+<!-- Bucket 1 -->
+<div>
+<div class="flex justify-between font-label-md text-label-md mb-2">
+<span class="text-on-surface">Portrait (Close-up)</span>
+<span class="text-on-surface-variant">800 / 1000</span>
+</div>
+<div class="h-2 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full w-[80%] transition-all duration-500"></div>
+</div>
+</div>
+<!-- Bucket 2 -->
+<div>
+<div class="flex justify-between font-label-md text-label-md mb-2">
+<span class="text-on-surface">Profile (Side)</span>
+<span class="text-on-surface-variant">450 / 1000</span>
+</div>
+<div class="h-2 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full w-[45%] transition-all duration-500"></div>
+</div>
+</div>
+<!-- Bucket 3 -->
+<div>
+<div class="flex justify-between font-label-md text-label-md mb-2">
+<span class="text-on-surface">Studio Lighting</span>
+<span class="text-on-surface-variant">150 / 1500</span>
+</div>
+<div class="h-2 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full w-[10%] transition-all duration-500"></div>
+</div>
+</div>
+<!-- Bucket 4 -->
+<div>
+<div class="flex justify-between font-label-md text-label-md mb-2">
+<span class="text-on-surface">Environmental</span>
+<span class="text-on-surface-variant">32 / 1500</span>
+</div>
+<div class="h-2 w-full bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full w-[2%] transition-all duration-500"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Hardware Telemetry & Sparkline -->
+<div class="bg-surface-container-lowest rounded-3xl p-6 ambient-shadow transition-all duration-300 flex-1">
+<div class="flex items-center gap-2 mb-4">
+<span class="material-symbols-outlined text-primary">memory</span>
+<h3 class="font-title-lg text-title-lg text-on-surface">Telemetry</h3>
+</div>
+<div class="grid grid-cols-2 gap-4 mb-6">
+<div class="bg-surface-container p-4 rounded-xl">
+<span class="font-label-md text-label-md text-on-surface-variant block mb-1">GPU Utilization</span>
+<span class="font-headline-lg text-headline-lg text-on-surface">94%</span>
+</div>
+<div class="bg-surface-container p-4 rounded-xl">
+<span class="font-label-md text-label-md text-on-surface-variant block mb-1">VRAM Allocation</span>
+<span class="font-headline-lg text-headline-lg text-on-surface">22GB</span>
+</div>
+</div>
+<div>
+<span class="font-label-md text-label-md text-on-surface-variant block mb-2">Loss Stability</span>
+<div class="h-24 w-full bg-surface-container rounded-xl overflow-hidden relative">
+<!-- Minimalist SVG Sparkline -->
+<svg class="w-full h-full" preserveaspectratio="none" viewbox="0 0 100 30">
+<defs>
+<lineargradient id="gradient" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" stop-color="#2976c7" stop-opacity="0.2"></stop>
+<stop offset="100%" stop-color="#2976c7" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<path d="M0,30 L0,20 Q10,15 20,22 T40,18 T60,25 T80,10 T100,5 L100,30 Z" fill="url(#gradient)"></path>
+<path class="sparkline-path" d="M0,20 Q10,15 20,22 T40,18 T60,25 T80,10 T100,5" fill="none" stroke="#005da7" stroke-linecap="round" stroke-width="1.5"></path>
+</svg>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

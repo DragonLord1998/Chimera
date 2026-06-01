@@ -362,6 +362,16 @@ MODEL_LORA_COMMAND="..." bash /content/project-chimera/colab_lora_factory.sh
 
 Do not set `HOST=0.0.0.0`. The launcher will refuse it.
 
+## Contract Test
+
+Run the local orchestration contract test before changing the full pipeline route:
+
+```bash
+python tests/full_pipeline_contract.py
+```
+
+The test uses temporary command shims and fake QC inside the test process only. Production runtime still requires real Flux2-PuLID, Z-Image, and model-LoRA commands.
+
 ## Storage Layout
 
 Persistent storage root:

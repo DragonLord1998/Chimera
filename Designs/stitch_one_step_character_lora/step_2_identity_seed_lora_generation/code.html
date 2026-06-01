@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Step 2: Identity Seed LoRA Generation - Project Chimera</title>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&amp;family=Roboto+Flex:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script type='text/javascript' nonce='Yaje14RI6Z/xAnoqHA+YTw==' src='https://contribution.usercontent.google.com/zAHdU4L92ArI6yWPd3nzKXInhcd4VzC7yHCte2k0ixufQnwFDilw5SaLyB7_Hb9xmSFvnTMxiVnqVNvzl2ppX5N5iVGH4NT8IjVo0g-iJzmHOwXDCRUOPQsS8PnUtj1Y5bAHGitUvxli2UdgwazJ0cKHNtfz9kHiSG98YvKwTazpPHasCw1RU9JJn0LMTg6XOE4QfRDZMCW_OhQ9cirDIY4MUh76caiu1gTbDeAxANV_5m-LlhWHgVBt3wyEpmEAP8ywak0-kV9OvA5LEBqPIV1RJsKXYCmD2VA2Al4VJVlx6z6G85-zr4wn0iv6H4htrnfV-2c87TxqMRmF_Svdz2qfBpwhscn7mxZmI2uQjWWQ07XJ9jXRpdHTH2vw5L9oirIPBrQbURhHSxoGlxX9PlT97Ee6s30cakN2BYG1plh8fyZ55stk1YVR-22VjbvO6OcEKx2Klhr7V1KkDq1fiQGXm7mZbcEtzCMTULowqshaRrIbAmfAuHVIX0X83OwVQ2mmGsn2TZldEpIv8N-3_cAI6xqBb7xaHyKgeFPyYoBcFOkd0xEpTy4VgXmpp1mivymoCJ2bBcbQnENxTaPxxtQwkU1KR1Q3rvPveOOty7Ql_q5FWn-d_yP3TKXz_KZQUxkI_ZTAn-I8B8Wy_05D5UdijR7Xs3NZZjh9hEKWVu4Iute74N7xutN_xHf_KvVHXF4jcbRiQisauDVXhRUblswuueQ6pB4nj7LNrI9F5OxDFoj0JjVgOtsjo5Me-18NLuxaL2vZLnZnFFKBa5H0zUvhMbLEEcOAax54gg'></script><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Design System Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-tertiary-fixed": "#2f1400",
+                    "surface-container-high": "#e7e8e9",
+                    "inverse-surface": "#2e3132",
+                    "primary-container": "#2976c7",
+                    "on-primary": "#ffffff",
+                    "tertiary-container": "#a96428",
+                    "surface-tint": "#0060ac",
+                    "tertiary-fixed-dim": "#ffb780",
+                    "secondary-fixed": "#baebf5",
+                    "on-secondary-container": "#3c6b75",
+                    "error": "#ba1a1a",
+                    "surface-container": "#edeeef",
+                    "surface-dim": "#d9dadb",
+                    "primary-fixed-dim": "#a4c9ff",
+                    "on-secondary-fixed": "#001f25",
+                    "on-tertiary": "#ffffff",
+                    "on-primary-fixed": "#001c39",
+                    "tertiary-fixed": "#ffdcc4",
+                    "tertiary": "#8b4c11",
+                    "on-secondary": "#ffffff",
+                    "inverse-primary": "#a4c9ff",
+                    "error-container": "#ffdad6",
+                    "surface-variant": "#e1e3e4",
+                    "on-tertiary-fixed-variant": "#6f3800",
+                    "surface-container-lowest": "#ffffff",
+                    "surface": "#f8f9fa",
+                    "primary-fixed": "#d4e3ff",
+                    "on-primary-fixed-variant": "#004883",
+                    "on-tertiary-container": "#fffbff",
+                    "on-secondary-fixed-variant": "#1b4d56",
+                    "secondary-container": "#baebf5",
+                    "on-error": "#ffffff",
+                    "background": "#f8f9fa",
+                    "inverse-on-surface": "#f0f1f2",
+                    "outline-variant": "#c1c7d3",
+                    "on-surface": "#191c1d",
+                    "on-background": "#191c1d",
+                    "secondary-fixed-dim": "#9fced9",
+                    "outline": "#717783",
+                    "surface-container-low": "#f3f4f5",
+                    "on-primary-container": "#fdfcff",
+                    "primary": "#005da7",
+                    "secondary": "#36656e",
+                    "on-surface-variant": "#414751",
+                    "surface-container-highest": "#e1e3e4",
+                    "on-error-container": "#93000a",
+                    "surface-bright": "#f8f9fa"
+            },
+            "borderRadius": {
+                    "DEFAULT": "1rem",
+                    "lg": "2rem",
+                    "xl": "3rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "section-gap": "48px",
+                    "gutter": "16px",
+                    "container-margin": "24px",
+                    "unit": "8px"
+            },
+            "fontFamily": {
+                    "label-md": ["Roboto Flex"],
+                    "title-lg": ["Plus Jakarta Sans"],
+                    "headline-lg": ["Plus Jakarta Sans"],
+                    "body-lg": ["Roboto Flex"],
+                    "headline-lg-mobile": ["Plus Jakarta Sans"],
+                    "body-md": ["Roboto Flex"],
+                    "display-lg": ["Plus Jakarta Sans"]
+            },
+            "fontSize": {
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.1px", "fontWeight": "500"}],
+                    "title-lg": ["22px", {"lineHeight": "28px", "fontWeight": "500"}],
+                    "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "600"}],
+                    "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "headline-lg-mobile": ["28px", {"lineHeight": "36px", "fontWeight": "600"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "display-lg": ["57px", {"lineHeight": "64px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+            }
+          }
+        }
+      }
+    </script>
+<style>
+        body { background-color: #f8f9fa; }
+        .ambient-shadow-hover:hover {
+            box-shadow: 0 12px 32px -8px rgba(0, 93, 167, 0.12); /* Based on primary color */
+            transform: translateY(-2px);
+        }
+        .progress-gradient {
+            background: linear-gradient(90deg, #005da7 0%, #36656e 100%);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex flex-col font-body-lg text-body-lg">
+<!-- TopNavBar -->
+<nav class="sticky top-0 z-50 flex justify-between items-center px-gutter w-full h-16 bg-surface/80 backdrop-blur-md">
+<div class="flex items-center gap-6">
+<div class="text-title-lg font-title-lg font-bold text-primary">Chimera</div>
+<div class="hidden md:flex gap-6 items-center pt-2">
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary pb-2" href="#">Ingest</a>
+<a class="font-label-md text-label-md text-primary border-b-2 border-primary pb-2" href="#">Expansion</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary pb-2" href="#">QC</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary pb-2" href="#">Library</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary pb-2" href="#">Factory</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary pb-2" href="#">Dashboard</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 rounded-full hover:bg-surface-variant/50 transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 rounded-full hover:bg-surface-variant/50 transition-colors text-on-surface-variant">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<img alt="User profile avatar" class="w-8 h-8 rounded-full ml-2" data-alt="A small, circular avatar portrait of a professional individual against a clean, light-mode background. The lighting is soft and flattering, suitable for a corporate or technical interface. The overall style is modern, minimalist, and perfectly aligns with a crisp Expressive Neuralism design system." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQiu2ULJqgbKk1qSFxa8aPsqz5CDeyBG7ez6rmg4gOOm3rcFB4hQDUgFMOhft0U-c86fkHK1GBlOmpK6uOePD6Zqh_XRNVveNt7GoSFJU1tHHPeRyDLZLjPn3UlinK-HFG9uvz3zdD9er9YjvI8pLVYvOv4d_q2iBgvSGR3N1FIwIGVpJ34rW0BdR6iRsQd7XVrYN_9zsRrELvYesCMcgNFPlops68fezwc4kjBJM8aOGlJP0fGy5qoUriTIqaqImKtFutU28L34Y"/>
+</div>
+</nav>
+<div class="flex flex-1 overflow-hidden relative">
+<!-- SideNavBar -->
+<aside class="hidden md:flex fixed left-0 top-16 h-[calc(100vh-64px)] w-64 flex-col p-gutter gap-unit bg-surface-container-low rounded-r-xl shadow-sm z-40">
+<div class="flex items-center gap-4 mb-6 mt-4 px-2">
+<div class="w-10 h-10 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container">
+<span class="material-symbols-outlined">view_in_ar</span>
+</div>
+<div>
+<div class="font-title-lg text-title-lg text-primary text-base">Project Chimera</div>
+<div class="font-label-md text-label-md text-on-surface-variant">V0.4.2 Neural Core</div>
+</div>
+</div>
+<button class="mb-6 mx-2 py-3 px-4 bg-primary text-on-primary font-label-md text-label-md rounded-full hover:shadow-md transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                New Experiment
+            </button>
+<nav class="flex flex-col gap-1 flex-1">
+<a class="flex items-center gap-3 px-4 py-3 bg-secondary-container text-on-secondary-container rounded-full font-label-md text-label-md opacity-80 transition-transform duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined">folder_open</span> Projects
+                </a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant rounded-full font-label-md text-label-md hover:bg-surface-variant/30 transition-transform duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined">memory</span> Hardware
+                </a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant rounded-full font-label-md text-label-md hover:bg-surface-variant/30 transition-transform duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined">database</span> Datasets
+                </a>
+<a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant rounded-full font-label-md text-label-md hover:bg-surface-variant/30 transition-transform duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined">history</span> History
+                </a>
+</nav>
+<div class="mt-auto pt-4 border-t border-outline-variant/30 flex flex-col gap-1">
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant rounded-full font-label-md text-label-md hover:bg-surface-variant/30 transition-transform duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined">help_outline</span> Support
+                </a>
+<a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant rounded-full font-label-md text-label-md hover:bg-surface-variant/30 transition-transform duration-200 hover:translate-x-1" href="#">
+<span class="material-symbols-outlined">terminal</span> System
+                </a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 ml-0 md:ml-64 p-container-margin md:p-[32px] lg:p-[48px] max-w-[1440px] mx-auto w-full overflow-y-auto">
+<!-- Page Header -->
+<header class="mb-section-gap flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+<div class="max-w-3xl">
+<div class="flex items-center gap-3 mb-2">
+<span class="px-3 py-1 bg-surface-variant text-on-surface-variant font-label-md text-label-md rounded-full inline-block">Phase 2 of 6</span>
+<span class="px-3 py-1 bg-primary-container text-on-primary-container font-label-md text-label-md rounded-full inline-block flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">bolt</span> Running
+                        </span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-3">Step 2: Identity Seed LoRA (Z-Image Turbo)</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant leading-relaxed">
+                        Training a fast identity bootstrap model to create a large synthetic candidate pool. This model is an expansion tool, not the final identity authority.
+                    </p>
+</div>
+<div class="flex gap-3 shrink-0">
+<button class="px-6 py-2.5 bg-surface-variant text-on-surface-variant font-label-md text-label-md rounded-full hover:bg-outline-variant/30 transition-colors">
+                        View Logs
+                    </button>
+<button class="px-6 py-2.5 bg-error-container text-on-error-container font-label-md text-label-md rounded-full hover:bg-error/20 transition-colors">
+                        Abort
+                    </button>
+<button class="px-6 py-2.5 bg-primary text-on-primary font-label-md text-label-md rounded-full hover:shadow-md transition-all flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">pause</span>
+                        Pause Training
+                    </button>
+</div>
+</header>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-1 md:grid-cols-12 gap-container-margin">
+<!-- Left Column (Wider) -->
+<div class="md:col-span-8 flex flex-col gap-container-margin">
+<!-- Training Status Card -->
+<div class="bg-surface-container-low rounded-3xl p-6 transition-all duration-300 ambient-shadow-hover">
+<div class="flex justify-between items-end mb-6">
+<div>
+<h2 class="font-title-lg text-title-lg text-on-surface mb-1">Training Progress</h2>
+<p class="font-label-md text-label-md text-on-surface-variant">Step 450 / 1000</p>
+</div>
+<div class="font-headline-lg text-headline-lg text-primary">45%</div>
+</div>
+<div class="w-full h-[8px] bg-surface-variant rounded-full overflow-hidden">
+<div class="h-full progress-gradient rounded-full" style="width: 45%;"></div>
+</div>
+<div class="mt-4 flex justify-between text-on-surface-variant font-label-md text-label-md">
+<span>Est. Time Remaining: 12m 45s</span>
+<span>Loss: 0.0432</span>
+</div>
+</div>
+<!-- Live Samples Card -->
+<div class="bg-surface-container-low rounded-3xl p-6 transition-all duration-300 ambient-shadow-hover flex-1">
+<div class="flex justify-between items-center mb-6">
+<h2 class="font-title-lg text-title-lg text-on-surface">Live Candidates Pool</h2>
+<button class="p-2 rounded-full hover:bg-surface-variant text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined">refresh</span>
+</button>
+</div>
+<div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+<!-- Real Sample 1 -->
+<div class="aspect-square rounded-2xl overflow-hidden relative group">
+<img alt="Generated sample" class="w-full h-full object-cover" data-alt="A high-quality, synthetic AI-generated portrait of a woman looking directly at the camera. The image features soft, diffuse studio lighting that highlights her facial structure against a pristine, neutral light-grey background. The aesthetic is incredibly sharp, modern, and aligned perfectly with the clean, bright &#39;Expressive Neuralism&#39; design language of the interface. The mood is calm and professional." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCPPorAcwQu-KyrNod87_VV6Mg0uKCkA9rM6u9PA5TVzSnw44SFt9k8KcXXfTxisE10jfGY_mIgHD1hm6kyJdia1aLGEg_aNgsIh0qlP6Lmlz4uvLetGsDesjL0TrYiM9h1VQhxk-sIS0ZLnapSeKV8XcR2RGzeTTwBjsHVizlCNH9C5oOkMAzOS2ybzxUcp1cmH4Zs10KUn2h76w4sHsUQ5bHENISox5IYH035BAHNQn0YFZlzkF_071qZLj25QWR9sSpWwsrapqU"/>
+<div class="absolute bottom-2 left-2 px-2 py-1 bg-surface/80 backdrop-blur-sm rounded-lg font-label-md text-label-md text-on-surface">Step 100</div>
+</div>
+<!-- Real Sample 2 -->
+<div class="aspect-square rounded-2xl overflow-hidden relative group">
+<img alt="Generated sample" class="w-full h-full object-cover" data-alt="A highly detailed synthetic portrait of a young man with distinct facial features, generated by a neural network. The lighting is balanced and natural, casting subtle shadows that give depth to the face. Set against a soft, light-toned backdrop, the image maintains a sterile yet approachable quality typical of advanced AI training interfaces in a light-mode environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDYO7ZDWBzaqMMiSMQHhpjK_T45orKCHz54-GqU5-ANWpIVbbDRnwIvJdFXrz4vvImYBwELBev2dlPR6rgXJvPtsXjakQgV3tkZFwZlh0A3lNpJS9-jcGmdQ1jOsrDsZQDrP9_Yxvzp1Jzo8EZLicovdGeE0IqW0jCqfFHHBTtXCbJNWyUU9UviiVfIYq7xd-2_O3bHuZXIOm87CzhE3wARRRR6udFz8qjEjE9oWHr0WqQxclnaDlm8z0XiL-Cc4AzYzcrF26qI9xU"/>
+<div class="absolute bottom-2 left-2 px-2 py-1 bg-surface/80 backdrop-blur-sm rounded-lg font-label-md text-label-md text-on-surface">Step 200</div>
+</div>
+<!-- Real Sample 3 -->
+<div class="aspect-square rounded-2xl overflow-hidden relative group">
+<img alt="Generated sample" class="w-full h-full object-cover" data-alt="An expansive, synthetic close-up portrait of an individual demonstrating the progress of an identity LoRA model. The visual style is exceptionally clean, with a high-key lighting setup that eliminates harsh contrasts. The soft, rounded aesthetic of the subject subtly reflects the fluid geometry of the surrounding UI, projecting an intelligent and serene presence." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2xHn29idhxgBaDF4_2gwR2DR_axK5iz2kVfLtyRRsRPB9MirhZ8yBxGUnaKMipMIkpGgIgtCt__SUBDjAmo7HBE3WuknWNJhrySKuV3YlKzaL2pU0VbpRnZ_X0q0ils-D5rglIqddAG6VgzGJbaqRiJ6_4w8v20FpC-NAii4bWukdMV5Mxolb0xoqHdYpuZMig9L722ZDrpMXd5LkkxPZYMhU6vHT8U3mYBInA5qU0l5hP2N2sDCtY3QgXQABfH6a2Okgcx1J0DI"/>
+<div class="absolute bottom-2 left-2 px-2 py-1 bg-surface/80 backdrop-blur-sm rounded-lg font-label-md text-label-md text-on-surface">Step 400</div>
+</div>
+<!-- Placeholder 1 -->
+<div class="aspect-square rounded-2xl border-2 border-dashed border-outline-variant bg-surface flex flex-col items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined mb-2 text-outline">hourglass_empty</span>
+<span class="font-label-md text-label-md">Pending</span>
+<div class="mt-2 px-2 py-1 bg-surface-variant rounded-lg font-label-md text-label-md text-on-surface">Step 600</div>
+</div>
+<!-- Placeholder 2 -->
+<div class="aspect-square rounded-2xl border-2 border-dashed border-outline-variant bg-surface flex flex-col items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined mb-2 text-outline">hourglass_empty</span>
+<span class="font-label-md text-label-md">Pending</span>
+<div class="mt-2 px-2 py-1 bg-surface-variant rounded-lg font-label-md text-label-md text-on-surface">Step 800</div>
+</div>
+<!-- Placeholder 3 -->
+<div class="aspect-square rounded-2xl border-2 border-dashed border-outline-variant bg-surface flex flex-col items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined mb-2 text-outline">check_circle</span>
+<span class="font-label-md text-label-md">Target</span>
+<div class="mt-2 px-2 py-1 bg-surface-variant rounded-lg font-label-md text-label-md text-on-surface">Step 1000</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column (Narrower) -->
+<div class="md:col-span-4 flex flex-col gap-container-margin">
+<!-- Training Config Panel -->
+<div class="bg-surface-container-low rounded-3xl p-6 transition-all duration-300 ambient-shadow-hover">
+<h2 class="font-title-lg text-title-lg text-on-surface mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">tune</span> Parameters
+                        </h2>
+<div class="flex flex-col gap-4">
+<div class="p-3 bg-surface rounded-xl border border-outline-variant/20">
+<div class="font-label-md text-label-md text-on-surface-variant mb-1">Base Model</div>
+<div class="font-body-md text-body-md text-on-surface break-all">Tongyi-MAI/Z-Image-Turbo</div>
+</div>
+<div class="p-3 bg-surface rounded-xl border border-outline-variant/20">
+<div class="font-label-md text-label-md text-on-surface-variant mb-1">Adapter</div>
+<div class="font-body-md text-body-md text-on-surface break-all">ostris/zimage_turbo_training_adapter</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="p-3 bg-surface rounded-xl border border-outline-variant/20">
+<div class="font-label-md text-label-md text-on-surface-variant mb-1">Target Res</div>
+<div class="font-body-md text-body-md text-on-surface">1024x1024</div>
+</div>
+<div class="p-3 bg-surface rounded-xl border border-outline-variant/20">
+<div class="font-label-md text-label-md text-on-surface-variant mb-1">Trigger</div>
+<div class="font-body-md text-body-md text-primary font-mono bg-primary-container/20 px-2 py-0.5 rounded inline-block">zphchar</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Real-time Telemetry -->
+<div class="bg-surface-container-low rounded-3xl p-6 transition-all duration-300 ambient-shadow-hover">
+<h2 class="font-title-lg text-title-lg text-on-surface mb-6 flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary">speed</span> Telemetry
+                        </h2>
+<div class="grid grid-cols-2 gap-4">
+<!-- GPU -->
+<div class="bg-surface p-4 rounded-2xl flex flex-col gap-1 relative overflow-hidden">
+<div class="font-label-md text-label-md text-on-surface-variant flex justify-between">
+<span>GPU Util</span>
+<span class="material-symbols-outlined text-[16px] text-error">memory</span>
+</div>
+<div class="font-title-lg text-title-lg text-on-surface">94%</div>
+<div class="absolute bottom-0 left-0 w-full h-1 bg-surface-variant">
+<div class="h-full bg-error" style="width: 94%;"></div>
+</div>
+</div>
+<!-- VRAM -->
+<div class="bg-surface p-4 rounded-2xl flex flex-col gap-1 relative overflow-hidden">
+<div class="font-label-md text-label-md text-on-surface-variant flex justify-between">
+<span>VRAM</span>
+<span class="material-symbols-outlined text-[16px] text-tertiary">save</span>
+</div>
+<div class="font-title-lg text-title-lg text-on-surface">22GB</div>
+<div class="absolute bottom-0 left-0 w-full h-1 bg-surface-variant">
+<div class="h-full bg-tertiary" style="width: 90%;"></div>
+</div>
+</div>
+<!-- CPU -->
+<div class="bg-surface p-4 rounded-2xl flex flex-col gap-1 relative overflow-hidden">
+<div class="font-label-md text-label-md text-on-surface-variant flex justify-between">
+<span>CPU</span>
+<span class="material-symbols-outlined text-[16px] text-secondary">developer_board</span>
+</div>
+<div class="font-title-lg text-title-lg text-on-surface">34%</div>
+<div class="absolute bottom-0 left-0 w-full h-1 bg-surface-variant">
+<div class="h-full bg-secondary" style="width: 34%;"></div>
+</div>
+</div>
+<!-- Power -->
+<div class="bg-surface p-4 rounded-2xl flex flex-col gap-1 relative overflow-hidden">
+<div class="font-label-md text-label-md text-on-surface-variant flex justify-between">
+<span>Power</span>
+<span class="material-symbols-outlined text-[16px] text-primary">power</span>
+</div>
+<div class="font-title-lg text-title-lg text-on-surface">450W</div>
+<div class="absolute bottom-0 left-0 w-full h-1 bg-surface-variant">
+<div class="h-full bg-primary" style="width: 85%;"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+<!-- Footer -->
+<footer class="w-full flex justify-between items-center px-gutter py-2 text-label-md border-t border-outline-variant bg-surface-dim z-50 relative">
+<div class="font-label-md text-label-md text-on-surface">
+            © 2024 Neural Fabric Systems. Hardware Status: All Systems Nominal.
+        </div>
+<div class="flex gap-4">
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-opacity duration-200" href="#">Documentation</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-opacity duration-200" href="#">API Reference</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-opacity duration-200" href="#">Status</a>
+</div>
+</footer>
+</body></html>

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Phase 5: Curated Character Dataset - Project Chimera</title>
+<script type='text/javascript' nonce='XeiV6r/hhyKEDDcDGoghWw==' src='https://contribution.usercontent.google.com/zRCuPUD5vKwb7pWXQA5ZEO55edg97jnBQcQw2FFGrNB5eyQkj7KNbdpmQlzDJ_dSUzrOoEcH7HGs0ghTEXPkuMM0n6ZYgoXIiNx3zlZh_ROPNxJwCD-SObHt6NK3WWJAq7I8YNrnZ0q73MGFewD5YGaFouAIo-PG74oL2GJAM0rfhZosdzBio6uYLD78Z2Gt9QpGpPTI2fAcjBGCawVuW_34ED3F3B2SYH8s6NAFBSxCCRrc4ma_dUzfbScJYco1DefjuInt2nk2BQHR38Erie2WIcmO3BTqtI7cYBiy1Ct3Fey_JLNpdUY3ZWg6fphOxC1vlMnvg3VpdJ8ySg3ILmElwMgUFkkiouqS9Nftxq6R2dNXIdixRHW_CYHaMh_QU97wM4uGjyiNLgjpzuiJIDkYe-oSMKR-IZmQ4ZKrXJRybXYd9HXdROw3lrNWgB8Y2ogO_CQYvDYsg-THFUkE2paNBGm8t1vZiWPN3Yo3S3mKw7cqcY_5gfWdW52CG8DAdIIh7jfo844RkSuHLvqWMIcLdM-JZ9a00v7KhSy-dxTifubF7nkuhOi4rg1z2a7Pcjpfl31LoPcFa4AKc3GgWMPFJsYlpz09a7Mu8k9gRlQLTTBHX7JEpg3JOUBOLOaTL-y4U-NbQNRwysCt9oD1gaV1GsLI1Q5yZVIJzoVrinuDHugXBNvNXN_zPx4l9QUtykpmcbMNPSkzBzNkHf98xXX3NTZih-oN5YszbaPOVfw9NVGPoytRtHMFTUfF6mrFiEnrt2E5kBQnfVSbO4zdaf2ut7NNv_QFfKPa7Q'></script><script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&amp;family=Roboto+Flex:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "outline": "#717783",
+                      "on-tertiary-fixed": "#2f1400",
+                      "primary-fixed-dim": "#a4c9ff",
+                      "on-primary": "#ffffff",
+                      "on-primary-fixed": "#001c39",
+                      "tertiary-container": "#a96428",
+                      "surface-dim": "#d9dadb",
+                      "surface-container-lowest": "#ffffff",
+                      "on-primary-container": "#fdfcff",
+                      "on-tertiary-container": "#fffbff",
+                      "on-tertiary-fixed-variant": "#6f3800",
+                      "tertiary-fixed": "#ffdcc4",
+                      "secondary-fixed": "#baebf5",
+                      "outline-variant": "#c1c7d3",
+                      "on-secondary-fixed": "#001f25",
+                      "on-background": "#191c1d",
+                      "surface": "#f8f9fa",
+                      "background": "#f8f9fa",
+                      "surface-tint": "#0060ac",
+                      "primary": "#005da7",
+                      "surface-variant": "#e1e3e4",
+                      "error-container": "#ffdad6",
+                      "surface-container-high": "#e7e8e9",
+                      "inverse-surface": "#2e3132",
+                      "secondary-container": "#baebf5",
+                      "primary-container": "#2976c7",
+                      "on-error-container": "#93000a",
+                      "on-surface": "#191c1d",
+                      "tertiary": "#8b4c11",
+                      "inverse-primary": "#a4c9ff",
+                      "on-secondary-container": "#3c6b75",
+                      "inverse-on-surface": "#f0f1f2",
+                      "secondary": "#36656e",
+                      "on-surface-variant": "#414751",
+                      "on-secondary": "#ffffff",
+                      "surface-bright": "#f8f9fa",
+                      "surface-container": "#edeeef",
+                      "on-tertiary": "#ffffff",
+                      "surface-container-highest": "#e1e3e4",
+                      "surface-container-low": "#f3f4f5",
+                      "on-primary-fixed-variant": "#004883",
+                      "on-error": "#ffffff",
+                      "secondary-fixed-dim": "#9fced9",
+                      "error": "#ba1a1a",
+                      "tertiary-fixed-dim": "#ffb780",
+                      "on-secondary-fixed-variant": "#1b4d56",
+                      "primary-fixed": "#d4e3ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "1rem",
+                      "lg": "2rem",
+                      "xl": "3rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "unit": "8px",
+                      "container-margin": "24px",
+                      "section-gap": "48px",
+                      "gutter": "16px"
+              },
+              "fontFamily": {
+                      "display-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "label-md": [
+                              "Roboto Flex"
+                      ],
+                      "body-lg": [
+                              "Roboto Flex"
+                      ],
+                      "headline-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "title-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-lg-mobile": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "body-md": [
+                              "Roboto Flex"
+                      ]
+              },
+              "fontSize": {
+                      "display-lg": [
+                              "57px",
+                              {
+                                      "lineHeight": "64px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "label-md": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.1px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "body-lg": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "title-lg": [
+                              "22px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "28px",
+                              {
+                                      "lineHeight": "36px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "body-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "fontWeight": "400"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+</head>
+<body class="bg-background text-on-background font-body-lg min-h-screen flex selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar Web Standard -->
+<div class="hidden md:flex w-full h-16 sticky top-0 z-50 bg-surface flex justify-between items-center px-gutter max-w-[1440px] mx-auto transition-all duration-300 absolute w-full" id="top-nav">
+<div class="flex items-center gap-container-margin">
+<span class="font-display-lg text-title-lg font-bold text-primary">Chimera</span>
+<nav class="flex gap-gutter h-full items-end">
+<a class="text-on-surface-variant hover:text-primary transition-colors pb-1 scale-95 duration-150" href="#">Ingest</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors pb-1 scale-95 duration-150" href="#">Synthetic Expansion</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors pb-1 scale-95 duration-150" href="#">Identity QC</a>
+<a class="text-primary border-b-2 border-primary pb-1 scale-95 duration-150" href="#">Model Factory</a>
+</nav>
+</div>
+<div class="flex items-center gap-unit">
+<button aria-label="notifications" class="p-2 rounded-full hover:bg-surface-variant text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button aria-label="settings" class="p-2 rounded-full hover:bg-surface-variant text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-outline-variant object-cover ml-2" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjPZTBeHmvFMu8Q1b9X1rxsDR32IG7lk2odj2u7aoYCpXRxHi0yvTLKJktF7JLbpyPL4MgAbTtPjAdY_WoKEbhZp7OUtqZ_NYd6NxoAktwFil6dNhnopzlhukAqGlEFyMSbsGfuXDyHsMzE6TfqBOxZVT90cNr3mC_qmImmgkb6W0ZXVXygWFnlEOAQGbNSEb5t9QbblK0HRX78c7IJVpCmhQQfZESoA_kbXFIz8Td2zK2gZ1Gsu6TtmnjYPJJqY0KfgDjevpM8WA"/>
+</div>
+</div>
+<!-- SideNavBar -->
+<nav class="hidden md:flex flex-col h-screen w-64 fixed left-0 top-0 rounded-r-lg bg-surface-container p-unit pt-16 z-40 transition-transform duration-300 transform -translate-x-full lg:translate-x-0" id="side-nav">
+<div class="flex flex-col items-center mb-section-gap pt-unit">
+<img alt="System Node" class="w-16 h-16 rounded-full mb-unit shadow-sm border border-outline-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBwtHWkzfIdSzpYgNNAQe6UdGpSsq1bCpIR09OacDjWVlfpe0feZYTqNTtKHLqtTI0VYO7Ta9rE1TcNFSkZVvcwexKFTIp1NRe1nYBRF5KD36cTMHMIbfHxjrcrOJ8hPLZ_wqKqR6nlakx6p9lVB7BbJuG1NRAAGQFqjRIzNa7vgg4wu15xsnw_eb8VDAM9fNPveONcHgGZppq3sa4y-j31RBgGsRIsV11nnYwRrOAzIm6gaaIl-2pMDmcYlG1clr984iiMjCzsy6o"/>
+<h2 class="font-headline-lg text-title-lg text-primary text-center">Project Chimera</h2>
+<span class="font-label-md text-label-md text-on-surface-variant">Active Session</span>
+</div>
+<div class="flex flex-col gap-unit flex-grow">
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-surface-variant hover:bg-surface-variant transition-all scale-[0.98] duration-200 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">memory</span>
+<span class="font-body-md text-body-md">Hardware</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl bg-secondary-container text-on-secondary-container font-bold scale-[0.98] duration-200 shadow-sm relative overflow-hidden" href="#">
+<div class="absolute inset-0 bg-primary opacity-5"></div>
+<span class="material-symbols-outlined" style="font-variation-settings: &#39;FILL&#39; 1;">database</span>
+<span class="font-body-md text-body-md relative z-10">Datasets</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-surface-variant hover:bg-surface-variant transition-all scale-[0.98] duration-200 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">analytics</span>
+<span class="font-body-md text-body-md">Logs</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-xl text-on-surface-variant hover:bg-surface-variant transition-all scale-[0.98] duration-200 group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary transition-colors">terminal</span>
+<span class="font-body-md text-body-md">Terminal</span>
+</a>
+</div>
+<div class="mt-auto pt-container-margin">
+<button class="w-full bg-primary hover:bg-primary-container text-on-primary font-label-md text-label-md py-3 px-4 rounded-full transition-all hover:shadow-md flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">add</span>
+                New Training Run
+            </button>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 lg:ml-64 pt-16 md:pt-24 px-4 md:px-container-margin pb-section-gap max-w-[1440px] mx-auto w-full">
+<!-- Header Section -->
+<header class="mb-section-gap flex flex-col md:flex-row md:items-end justify-between gap-container-margin">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="px-3 py-1 bg-tertiary-container text-on-tertiary-container rounded-full font-label-md text-[10px] uppercase tracking-wider">Phase 5</span>
+<span class="text-on-surface-variant font-label-md text-label-md">High-Trust Curated</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-on-background">Character Dataset Library</h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant mt-2 max-w-2xl">Viewing 2,405 validated images containing the primary subject. Trigger token active.</p>
+</div>
+<div class="flex flex-wrap items-center gap-unit">
+<button class="bg-surface-container hover:bg-surface-variant text-on-surface py-2 px-4 rounded-full font-label-md text-label-md transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">edit_note</span>
+                    Batch Edit Captions
+                </button>
+<button class="bg-primary hover:bg-primary-container text-on-primary py-2 px-6 rounded-full font-label-md text-label-md transition-shadow hover:shadow-[0_4px_12px_rgba(0,93,167,0.2)] flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                    Export Dataset
+                </button>
+</div>
+</header>
+<!-- Tools & Filters Toolbar -->
+<div class="bg-surface-container-lowest rounded-3xl p-2 mb-container-margin flex flex-col md:flex-row gap-unit items-center justify-between border border-surface-variant shadow-sm relative z-10">
+<div class="flex items-center gap-2 w-full md:w-auto px-2">
+<span class="material-symbols-outlined text-outline">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-md text-on-surface w-full md:w-64 placeholder-outline" placeholder="Search captions, tags..." type="text"/>
+</div>
+<div class="h-6 w-px bg-surface-variant hidden md:block"></div>
+<div class="flex items-center gap-unit overflow-x-auto pb-2 md:pb-0 w-full md:w-auto hide-scrollbar">
+<span class="font-label-md text-label-md text-on-surface-variant whitespace-nowrap pl-2">Filter by Category:</span>
+<button class="px-4 py-1.5 bg-secondary-container text-on-secondary-container rounded-full font-label-md text-label-md whitespace-nowrap border border-transparent">All (2.4k)</button>
+<button class="px-4 py-1.5 bg-transparent hover:bg-surface-container text-on-surface rounded-full font-label-md text-label-md whitespace-nowrap border border-outline-variant transition-colors">Portraits (842)</button>
+<button class="px-4 py-1.5 bg-transparent hover:bg-surface-container text-on-surface rounded-full font-label-md text-label-md whitespace-nowrap border border-outline-variant transition-colors">Action (621)</button>
+<button class="px-4 py-1.5 bg-transparent hover:bg-surface-container text-on-surface rounded-full font-label-md text-label-md whitespace-nowrap border border-outline-variant transition-colors">Environments (942)</button>
+</div>
+<div class="flex items-center gap-2 px-2 ml-auto">
+<span class="font-label-md text-label-md text-on-surface-variant">Sort:</span>
+<select class="bg-transparent border-none focus:ring-0 text-body-md text-on-surface font-medium cursor-pointer pr-8 py-1 rounded-lg hover:bg-surface-container transition-colors">
+<option>Highest QC Score</option>
+<option>Newest Added</option>
+<option>Lowest Loss</option>
+</select>
+</div>
+</div>
+<!-- Bento Grid Dataset View -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-container-margin">
+<!-- Item 1 -->
+<div class="group bg-surface-container-low rounded-3xl overflow-hidden hover:shadow-[0_8px_24px_rgba(0,93,167,0.08)] transition-all duration-300 transform hover:-translate-y-1 relative border border-transparent hover:border-surface-variant">
+<div class="absolute top-3 right-3 z-10 flex gap-2">
+<span class="bg-primary/90 backdrop-blur-sm text-on-primary px-2 py-1 rounded-lg font-label-md text-[10px] font-bold shadow-sm">QC 98</span>
+</div>
+<div class="aspect-square w-full relative overflow-hidden bg-surface-variant">
+<img alt="Dataset item" class="object-cover w-full h-full group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="A highly detailed close-up portrait of a female character with piercing eyes in a studio setting. The lighting is soft and high-key, creating a bright, modern light-mode aesthetic. Colors are muted neural tones with crisp focus on facial features. Expressive neuralism style with soft depth of field." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA2c9B4lUHejyjiIVN2ASPqN7l4aCdj9jj2I6pvNpqAq8MKTv82jkKqyUt5AHYb_NTVXRkOjSMAHj3c27M2lxYoQ2B8VdmkZHxeUUnGBpJZCer3GtdkYcTqgbusagPgdXNPTS9ar0YSkPn0MjIy4cbdfP-m9-B03q5J2JuNTooN3dd2YG3UQBR2DsQMry5bCkLtB9CXfMF28G1gxpnZNWs8peW3M3H-Nu1hRCBL8HSnAilwV5oZyaS7hVdFK9v_gADW8tuUwzrrnh0"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+<button class="text-white hover:text-primary-fixed-dim transition-colors p-2 bg-white/20 backdrop-blur-md rounded-full mr-2">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="text-white hover:text-error-container transition-colors p-2 bg-white/20 backdrop-blur-md rounded-full">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+<div class="p-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="px-2 py-0.5 bg-surface-variant text-on-surface-variant rounded-md font-label-md text-[10px] border border-outline/20">zphchar</span>
+<span class="px-2 py-0.5 bg-surface-variant text-on-surface-variant rounded-md font-label-md text-[10px] border border-outline/20">portrait</span>
+</div>
+<p class="font-body-md text-body-md text-on-background line-clamp-2 leading-tight">zphchar as a scientist in a clean, brightly lit laboratory, close up portrait, professional lighting, hyperdetailed.</p>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="group bg-surface-container-low rounded-3xl overflow-hidden hover:shadow-[0_8px_24px_rgba(0,93,167,0.08)] transition-all duration-300 transform hover:-translate-y-1 relative border border-transparent hover:border-surface-variant">
+<div class="absolute top-3 right-3 z-10 flex gap-2">
+<span class="bg-primary/90 backdrop-blur-sm text-on-primary px-2 py-1 rounded-lg font-label-md text-[10px] font-bold shadow-sm">QC 95</span>
+</div>
+<div class="aspect-square w-full relative overflow-hidden bg-surface-variant">
+<img alt="Dataset item" class="object-cover w-full h-full group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="A portrait of a male character outdoors with soft natural lighting. The scene is slightly overcast, contributing to a muted, calming atmosphere. Focus is sharp on the face against a gently blurred urban background. Designed in a clean, modern light-mode style with expressive neuralism aesthetics." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1t03npJ2KhnkcnjBQoAZx4pF9vITBu2pw-A4iHIKv6Gfm-a2j2JcAzogu52SwK8J-oUGNDLDqCKbRStRZqHWgfxnqh2IYsLD46O0edHmRdehALoX_3cpv032n0qAbLgWcyNkE8EgOI5cz4naqnm_NUW6ZmhYUzSLnyKuMCWUIzodurMBjM53obMzl918ozEQge9Wrfh6tJwVGZYKmZTR7n9xEaPW6HQBOVkgcZ_Vg4CE4Ci03H-USotKQWlXYsCDdu9Np48hx3H0"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+<button class="text-white hover:text-primary-fixed-dim transition-colors p-2 bg-white/20 backdrop-blur-md rounded-full mr-2">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="text-white hover:text-error-container transition-colors p-2 bg-white/20 backdrop-blur-md rounded-full">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+<div class="p-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="px-2 py-0.5 bg-surface-variant text-on-surface-variant rounded-md font-label-md text-[10px] border border-outline/20">zphchar</span>
+<span class="px-2 py-0.5 bg-surface-variant text-on-surface-variant rounded-md font-label-md text-[10px] border border-outline/20">outdoor</span>
+</div>
+<p class="font-body-md text-body-md text-on-background line-clamp-2 leading-tight">zphchar looking thoughtful in an urban setting during daytime, overcast soft light, cinematic composition.</p>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="group bg-surface-container-low rounded-3xl overflow-hidden hover:shadow-[0_8px_24px_rgba(0,93,167,0.08)] transition-all duration-300 transform hover:-translate-y-1 relative border border-transparent hover:border-surface-variant">
+<div class="absolute top-3 right-3 z-10 flex gap-2">
+<span class="bg-tertiary-container/90 backdrop-blur-sm text-on-tertiary-container px-2 py-1 rounded-lg font-label-md text-[10px] font-bold shadow-sm">QC 88</span>
+</div>
+<div class="aspect-[4/3] md:aspect-square w-full relative overflow-hidden bg-surface-variant">
+<img alt="Dataset item" class="object-cover w-full h-full group-hover:scale-105 transition-transform duration-700 ease-out" data-alt="A futuristic scene featuring a character interacting with complex technological equipment in a pristine lab. High-key white lighting dominates, creating a sterile yet inviting modern workspace. Soft shadows and fluid organic geometry in the background emphasize an expressive neuralism theme." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFeuOlyI6lGAuki_Oiy5MFEp8ECQxZeJZWuyh7B9Fcb4haHcAat1syw--VGJtxZnHjpoA5WMTxqpHQaS0hz0ShOMPcLQl815nqlBYfXOKLTALmvnZshI_zjj71Yj7REoKkrcSGrFOH1X7A7tSvoH0uOI_Ib8vvxvqgyDuwlQ7q7rrhHxpbVO9uYFrNhGT9YCakfX0GHafT2K0SLHZ4LaKsAJlkMiSpqSXdDC9kn0cwZkijuljFOl_NGGMFbiXlUUjQ2gS_yiwRZ6w"/>
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+<button class="text-white hover:text-primary-fixed-dim transition-colors p-2 bg-white/20 backdrop-blur-md rounded-full mr-2">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="text-white hover:text-error-container transition-colors p-2 bg-white/20 backdrop-blur-md rounded-full">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+<div class="p-4">
+<div class="flex items-center gap-2 mb-2">
+<span class="px-2 py-0.5 bg-surface-variant text-on-surface-variant rounded-md font-label-md text-[10px] border border-outline/20">zphchar</span>
+<span class="px-2 py-0.5 bg-surface-variant text-on-surface-variant rounded-md font-label-md text-[10px] border border-outline/20">action</span>
+</div>
+<p class="font-body-md text-body-md text-on-background line-clamp-2 leading-tight">zphchar operating futuristic machinery, bright sterile lab environment, wide angle shot, highly detailed tech.</p>
+</div>
+</div>
+<!-- Pagination/Load More placeholder -->
+<div class="col-span-full flex justify-center mt-container-margin">
+<button class="bg-surface-container-highest hover:bg-surface-variant text-on-surface-variant py-3 px-8 rounded-full font-label-md text-label-md transition-all flex items-center gap-2">
+                    Load More Images
+                    <span class="material-symbols-outlined text-[18px]">expand_more</span>
+</button>
+</div>
+</div>
+</main>
+<!-- Mobile Bottom Navigation (Hidden on desktop) -->
+<nav class="md:hidden fixed bottom-0 left-0 w-full bg-surface border-t border-surface-variant flex justify-around py-3 z-50">
+<a class="flex flex-col items-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">memory</span>
+<span class="font-label-md text-[10px] mt-1">Hardware</span>
+</a>
+<a class="flex flex-col items-center text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: &#39;FILL&#39; 1;">database</span>
+<span class="font-label-md text-[10px] mt-1 font-bold">Datasets</span>
+</a>
+<a class="flex flex-col items-center text-on-surface-variant" href="#">
+<span class="material-symbols-outlined">analytics</span>
+<span class="font-label-md text-[10px] mt-1">Logs</span>
+</a>
+</nav>
+<script>
+        // Simple JS for visual interaction on nav scroll
+        window.addEventListener('scroll', () => {
+            const topNav = document.getElementById('top-nav');
+            if (window.scrollY > 10) {
+                topNav.classList.add('shadow-sm', 'bg-surface/90', 'backdrop-blur-md');
+                topNav.classList.remove('bg-surface');
+            } else {
+                topNav.classList.remove('shadow-sm', 'bg-surface/90', 'backdrop-blur-md');
+                topNav.classList.add('bg-surface');
+            }
+        });
+    </script>
+</body></html>
